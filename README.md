@@ -6,7 +6,7 @@ Vectorization of Arc Info Grid ASCII files as ESRI Shapefiles.
 Florian Lengyel, Advanced Science Research Center, CUNY
 
 ### Usage ###
-```bash
+```
 usage: aig2shp.py [-h] [-a attribute] [-e minX minY maxX maxY] [-l LAYER]
                      [--version] [--wgs84] [-x EXCLUDE]
                      grid_ASCII_file ESRI_shapefile
