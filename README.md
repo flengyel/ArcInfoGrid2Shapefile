@@ -10,10 +10,9 @@ size of the grid squares.
 ## Notes on coordinates ##
 * The ArcInfo raster format stores values in Lon, Lat <code>(x, y)</code> order, but the ESRI 
 shapefile format stores coordinates in Lat, Lon <code>(y, x)</code> order. 
-* The origin of the raster is defined to be the <code>(x, y)</code> coordinates of the upper left 
-grid square of size cellsize, namely <code>(x0, y0) = (xllcorner, yllcorner + nrows * cellsize)</code>. The coordinates of the center of the grid square at the origin are then 
-<code>(x0 + cellsize/2, y0 - cellsize/2)</code>. 
-*In general, the geographic coordinates <code>(x, y)</code> of the pixel at 
+* The origin of the raster is defined to be the <code>(x, y)</code> coordinates of the upper-left corner of the upper left grid square of size <code>cellsize</code>, namely <code>(x0, y0) = (xllcorner, yllcorner + nrows * cellsize)</code>. 
+* The coordinates of the center of the grid square at the origin are then <code>(x0 + cellsize/2, y0 - cellsize/2)</code>. 
+* In general, the geographic coordinates <code>(x, y)</code> of the pixel at 
 <code>(row, col)</code> are given by <code>(x, y) = (xllcorner + (col +1/2) * cellsize, yllcorner + (nrows - row - 1/2) * cellsize)</code>.
 
     
