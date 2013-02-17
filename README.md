@@ -1,4 +1,4 @@
-ArcInfoGrid2Shapefile
+aig2shp.py: ArcInfo Grid ASCII to ESRI Shapefile conversion
 =====================
 Vectorization of Arc Info Grid ASCII files as ESRI Shapefiles. 
 
