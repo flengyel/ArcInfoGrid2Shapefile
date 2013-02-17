@@ -7,7 +7,7 @@ of the grid, each containing an attribute value equal to the value of the corres
 ArcInfo raster pixel. The ArcInfo Grid ASCII header <code>cellsize</code> parameter
 determines the size of the grid squares. 
 
-In contrast to the ArcGIS Raster to Polygon utility, <code>aig2shp.py</code> does not require
+In contrast to the [ArcGIS Raster to Polygon](http://webhelp.esri.com/arcgisdesktop/9.3/index.cfm?TopicName=Raster%20To%20Polygon%20%20(Conversion)) utility, <code>aig2shp.py</code> does not require
 float raster values to be discretized into (nonnegative) integer values before conversion.
 Your raster data is preserved, which may have some advantages. One disadvantage is that
 data isn't compressed, and since a discrete classification isn't used, taking unions of
