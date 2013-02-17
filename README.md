@@ -82,4 +82,4 @@ Contact: gmail/skype/twitter florianlengyel
 Full license in License.txt
 
 ## References ##
-[1] Chad Monfreda, Navin Ramankutty,2 and Jonathan A. Foley. Farming the planet: 2. Geographic distribution of crop areas, yields, physiological types, and net primary production in the year 2000. GLOBAL BIOGEOCHEMICAL CYCLES, VOL. 22, GB1022, doi:10.1029/2007GB002947, 2008
+[1] [Chad Monfreda, Navin Ramankutty and Jonathan A. Foley. Farming the planet: 2. Geographic distribution of crop areas, yields, physiological types, and net primary production in the year 2000. Global Biogeochemical Cycles. Volume 22, Issue 1, March 2008.](http://dx.doi.org/10.1029/2007GB002947)
