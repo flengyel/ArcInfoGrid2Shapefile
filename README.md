@@ -1,7 +1,22 @@
 aig2shp.py: ArcInfo Grid ASCII to ESRI Shapefile conversion
 =====================
-Vectorization of Arc Info Grid ASCII files as ESRI Shapefiles. 
+Vectorization of ArcInfo Grid ASCII files as ESRI Shapefiles. 
+Python program to convert an ArcInfo Grid ASCII raster file to an ESRI shapefile with 
+a single layer containing oriented grid square polygons centered at the pixels 
+of the grid, each containing an attribute value equal to the value of the corresponding 
+ArcInfo raster pixel. The ArcInfo Grid ASCII header cellsize parameter determines the
+size of the grid squares. 
 
+## Notes on coordinates ##
+* The ArcInfo raster format stores values in Lon, Lat (x, y) order, but the ESRI shapefile format
+stores coordinates in Lat, Lon (y, x) order. The origin of the raster is defined to
+be the (x, y) coordinates of the upper left grid square of size cellsize, namely
+(x0, y0) = (xllcorner, yllcorner + nrows * cellsize). The coordinates of the center of the 
+grid square at the origin are then (x0 + cellsize/2, y0 - cellsize/2). In general, the 
+geographic coordinates (x, y) of the pixel at (row, col) are given by
+(x, y) = (xllcorner + (col +1/2) * cellsize, yllcorner + (nrows - row - 1/2) * cellsize).
+
+    
 ## Author ##
 Florian Lengyel, [CUNY Environmental CrossRoads Initiative](http://asrc.cuny.edu/crossroads), 
 [Advanced Science Research Center](http://asrc.cuny.edu/crossroads),
