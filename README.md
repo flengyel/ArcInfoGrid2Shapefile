@@ -8,21 +8,20 @@ ArcInfo raster pixel. The ArcInfo Grid ASCII header cellsize parameter determine
 size of the grid squares. 
 
 ## Notes on coordinates ##
-* The ArcInfo raster format stores values in Lon, Lat (x, y) order, but the ESRI shapefile format
-stores coordinates in Lat, Lon (y, x) order. The origin of the raster is defined to
-be the (x, y) coordinates of the upper left grid square of size cellsize, namely
-(x0, y0) = (xllcorner, yllcorner + nrows * cellsize). The coordinates of the center of the 
-grid square at the origin are then (x0 + cellsize/2, y0 - cellsize/2). In general, the 
-geographic coordinates (x, y) of the pixel at (row, col) are given by
-(x, y) = (xllcorner + (col +1/2) * cellsize, yllcorner + (nrows - row - 1/2) * cellsize).
+* The ArcInfo raster format stores values in Lon, Lat <code>(x, y)</code> order, but the ESRI 
+shapefile format stores coordinates in Lat, Lon <code>(y, x)</code> order. 
+* The origin of the raster is defined to be the <code>(x, y)</code> coordinates of the upper left 
+grid square of size cellsize, namely <code>(x0, y0) = (xllcorner, yllcorner + nrows * cellsize)</code>. The coordinates of the center of the grid square at the origin are then 
+<code>(x0 + cellsize/2, y0 - cellsize/2)</code>. 
+*In general, the geographic coordinates <code>(x, y)</code> of the pixel at 
+<code>(row, col)</code> are given by <code>(x, y) = (xllcorner + (col +1/2) * cellsize, yllcorner + (nrows - row - 1/2) * cellsize)</code>.
 
     
 ## Author ##
 Florian Lengyel, [CUNY Environmental CrossRoads Initiative](http://asrc.cuny.edu/crossroads), 
 [Advanced Science Research Center](http://asrc.cuny.edu/crossroads),
 [The City College of New York](http://www.ccny.cuny.edu), [CUNY](http://www.cuny.edu).
-Contact: gmail/skype/twitter florianlengyel
-
+Contact: gmail/skype/twitter florianlengyel 
 ## Usage ##
 ```
 usage: aig2shp.py [-h] [-a attribute] [-e minX minY maxX maxY] [-l LAYER]
