@@ -70,6 +70,8 @@ shapefile.
 ``` 
 ./aig2shp.py -e -34.892837 -17.338675  37.428152 57.845763 --wgs84 -n -v ramankutty_cropland2000_frac_5m.asc vector_squares.shp
 ```
+The shapefile was uploaded to CartoDB; a screenshot is shown below.
+[<img src="https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCropland.png">](https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCropland.png)
 
 ## Author ##
 Florian Lengyel, [CUNY Environmental CrossRoads Initiative](http://asrc.cuny.edu/crossroads), 
