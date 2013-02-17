@@ -34,5 +34,6 @@ Create ESRI Shapefile grid poly coverage from Arcinfo Grid ASCII raster.
 
    (CC BY-NC-SA 3.0 US) 2013 Florian Lengyel, CUNY Environmental CrossRoads
    Initiative, Advanced Science Research Center, The City College of New York.
-   Contact: gmail/twitter florianlengyel.```
+   Contact: gmail/twitter florianlengyel.
+```
 
