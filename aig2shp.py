@@ -8,18 +8,19 @@ except:
   import osr
 import os, sys
 import numpy as np
-import pyproj as proj
+#import pyproj as proj
 import argparse as arg
 
 
 # Define the arguments first
-descript = "Create Shapefile grid poly coverage from Arcinfo Grid ASCII."
-parser  = arg.ArgumentParser( description = descript )
+descript = "Create ESRI Shapefile grid poly coverage from Arcinfo Grid ASCII raster."
+epistr   = "(CC BY-NC-SA 3.0 US) 2013 Florian Lengyel, CUNY Environmental CrossRoads Initiative, Advanced Science Research Center, The City College of New York. Contact: gmail/twitter florianlengyel."
+parser  = arg.ArgumentParser( description = descript, epilog=epistr )
 # value of dest derived from first long opt
 parser.add_argument('-a', '--attr',
                     metavar='attribute',
 		    default='value',
-		    help='Name of attribute for ArcInfo grid values.')
+		    help='Name of attribute for ArcInfo grid values. Defaults to "value."')
 parser.add_argument('-e', '--extent', 
 		    nargs=4, 
 		    type=float,
@@ -28,20 +29,18 @@ parser.add_argument('-e', '--extent',
 parser.add_argument('-l', '--layer', 
                     default='grid_value',
                     help='Shapefile layer name string.')
-parser.add_argument('-p', '--proj', help='Projection string')
-parser.add_argument('--version', action='version', version='%(prog)s 0.1')
+parser.add_argument('--version', action='version', version='%(prog)s 0.2')
+parser.add_argument('--wgs84', 
+		    action="store_true", 
+		    help='Set spatial reference to WGS84/EPSG:4326 in shapefile layer. Projection file (.prj) is written out.')
 parser.add_argument('-x', '--exclude', help='Exclude zero.')
 parser.add_argument('infile', 
 		    metavar='grid_ASCII_file',
 		    help='ArcInfo Grid ASCII input file.')
 parser.add_argument('outfile',
 		    metavar='ESRI_shapefile',
-		    help='ESRI shapefile output file')
+		    help='ESRI shapefile output file.')
 
-# we might want to project to WGS84
-spatialReference = osr.SpatialReference()
-spatialReference.ImportFromProj4('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
-wgs84 = proj.Proj("+init=EPSG:4326") #LatLon with WGS84 datum used by Google
 
 
 class ArcInfoGridASCII(object):
@@ -106,13 +105,21 @@ class ArcInfoGridASCII(object):
     maxX = lon + self.mid
     minY = lat - self.mid
     maxY = lat + self.mid
+
+    #you may need to project coordinates
+    #if args.wgs84:
+    # we might want to project to WGS84
+    #wgs84 = proj.Proj("+init=EPSG:4326") #LatLon with WGS84 datum used by Google
+    #This seems unnecessary -- although this is probably because the grid files
+    #I have been using were already in EPSG:4326.
+    
     # ESRI shapefiles store points in lat/lon order, whereas ArcInfo Grid ASCII
     # files store points in lon/lat order.
     ring.AddPoint(minY, minX)
     ring.AddPoint(maxY, minX)
     ring.AddPoint(maxY, maxX)
     ring.AddPoint(minY, maxX)
-    ring.CloseRings()
+    ring.AddPoint(minY, minX) # close the ring
     poly = ogr.Geometry(ogr.wkbPolygon) # create a new polygon
     poly.AddGeometry(ring) # add ring to polygon
     # add the attribute to the polygon
@@ -201,14 +208,21 @@ ds = drv.CreateDataSource( shpFile )
 if ds is None:
   raise IOError, "Creation of output file {0} failed.".format(shpFile)
 
-layer = ds.CreateLayer( args.layer , None, ogr.wkbPolygon )
+spatialReference = None
+if args.wgs84:
+  spatialReference = osr.SpatialReference()
+  spatialReference.ImportFromProj4('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+layer = ds.CreateLayer( args.layer , spatialReference, ogr.wkbPolygon )
 if layer is None:
   raise ValueError, "Layer creation failed."
 
 # define the attribute at the centroid of the grid square
+# a future version should set the type of the field from the command line
 fieldef = ogr.FieldDefn( args.attr , ogr.OFTReal )
 if layer.CreateField ( fieldef ) != 0:
   raise ValueError, "OGR field definition failed."
+
+print 'Converting to shapefile...'
 
 for row  in range(0, hdr.nrows):
   for col in range(0, hdr.ncols):
@@ -223,9 +237,7 @@ for row  in range(0, hdr.nrows):
         if layer.CreateFeature(feature):
           raise ValueError, "Could not create feature in shapefile."
         feature.Destroy()
-        print row, col, v , lat, lon # wgs84(lat, lon)
 
-#print '# polygons in geometry is: {0}'.format(str(multiPoly.GetGeometryCount()))
 
 ds.Destroy()
 
