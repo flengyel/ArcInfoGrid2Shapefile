@@ -26,7 +26,7 @@ Create ESRI Shapefile grid poly coverage from Arcinfo Grid ASCII raster.
                            Bounding box in geographic coordinates.
      -l LAYER, --layer LAYER
                            Shapefile layer name string.
-     --   version             show     ram's version number and exit
+     --version             show program's version number and exit
      --wgs84               Set spatial reference to WGS84/EPSG:4326 in shapefile
                            layer. Projection file (.prj) is written out.
      -x EXCLUDE, --exclude EXCLUDE
