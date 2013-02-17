@@ -6,11 +6,12 @@ Vectorization of Arc Info Grid ASCII files as ESRI Shapefiles.
 Florian Lengyel, Advanced Science Research Center, CUNY
 
 ### Usage ###
-   usage: aig2shp.py [-h] [-a attribute] [-e minX minY maxX maxY] [-l LAYER]
+```bash
+usage: aig2shp.py [-h] [-a attribute] [-e minX minY maxX maxY] [-l LAYER]
                      [--version] [--wgs84] [-x EXCLUDE]
                      grid_ASCII_file ESRI_shapefile
 
-   Create ESRI Shapefile grid poly coverage from Arcinfo Grid ASCII raster.
+Create ESRI Shapefile grid poly coverage from Arcinfo Grid ASCII raster.
 
    positional arguments:
      grid_ASCII_file       ArcInfo Grid ASCII input file.
@@ -33,5 +34,5 @@ Florian Lengyel, Advanced Science Research Center, CUNY
 
    (CC BY-NC-SA 3.0 US) 2013 Florian Lengyel, CUNY Environmental CrossRoads
    Initiative, Advanced Science Research Center, The City College of New York.
-   Contact: gmail/twitter florianlengyel.
+   Contact: gmail/twitter florianlengyel.```
 
