@@ -4,13 +4,13 @@ Vectorization of ArcInfo Grid ASCII files as ESRI Shapefiles.
 Python program to convert an ArcInfo Grid ASCII raster file to an ESRI shapefile with 
 a single layer containing oriented grid square polygons centered at the pixels 
 of the grid, each containing an attribute value equal to the value of the corresponding 
-ArcInfo raster pixel. The ArcInfo Grid ASCII header cellsize parameter determines the
-size of the grid squares. 
+ArcInfo raster pixel. The ArcInfo Grid ASCII header cellsize <code>parameter</code> 
+determines the size of the grid squares. 
 
 ## Notes on coordinates ##
-The following was determined from ESRI documentation online, by examination of the output of the 
-gdalinfo GDAL utility applied to ArcInfo Grid ASCII files, and by comparison of the computed results 
-within GIS systems.
+The following was determined from ESRI documentation of ArcInfo Grid ASCII files online, and 
+was verified by examination of the output of the <code>gdalinfo</code> GDAL utility applied to 
+ArcInfo Grid ASCII files, and by examination of converted files within GIS systems.
 * The ArcInfo Grid ASCII raster format stores values in Lon, Lat <code>(x, y)</code> order, but the ESRI shapefile format stores coordinates in Lat, Lon <code>(y, x)</code> order. 
 * The origin of the raster is defined to be the <code>(x, y)</code> coordinates of the upper-left corner of the upper left grid square of size <code>cellsize</code>, namely <code>(x0, y0) = (xllcorner, yllcorner + nrows * cellsize)</code>. 
 * The coordinates of the center of the grid square at the origin are then <code>(x0 + cellsize/2, y0 - cellsize/2)</code>. 
