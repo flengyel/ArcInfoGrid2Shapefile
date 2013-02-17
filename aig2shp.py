@@ -25,15 +25,23 @@ parser.add_argument('-e', '--extent',
 		    nargs=4, 
 		    type=float,
 		    metavar=('minX', 'minY', 'maxX', 'maxY'),
-		    help='Bounding box in geographic coordinates.')
+		    help='Bounding box of subset of raster in geographic coordinates.')
 parser.add_argument('-l', '--layer', 
                     default='grid_value',
                     help='Shapefile layer name string.')
-parser.add_argument('--version', action='version', version='%(prog)s 0.2')
+parser.add_argument('-n', '--nonzero', 
+		    action="store_true",
+		    help='Exclude zero values.')
+parser.add_argument('-v', '--verbose', 
+		    action="store_true",
+		    help='Display verbose output.')
+parser.add_argument('--version', 
+		    action='version', 
+		    version='%(prog)s 0.3',
+		    help='Show program version number and exit.')
 parser.add_argument('--wgs84', 
 		    action="store_true", 
 		    help='Set spatial reference to WGS84/EPSG:4326 in shapefile layer. Projection file (.prj) is written out.')
-parser.add_argument('-x', '--exclude', help='Exclude zero.')
 parser.add_argument('infile', 
 		    metavar='grid_ASCII_file',
 		    help='ArcInfo Grid ASCII input file.')
@@ -50,19 +58,21 @@ class ArcInfoGridASCII(object):
     line = self.file.readline()
     field = line.split()
     if len(field) != 2:
-      raise ValueError, "Expected field/value pair. Exiting"
+      raise ValueError, "Expected field/value pair."
     name = field[0]
     if name  != fieldname:
-      raise ValueError, "fieldname {0} missing. Exiting.".format(fieldname)
+      raise ValueError, "fieldname {0} missing.".format(fieldname)
     try:
       value = typeconv(field[1])
     except:
-      raise ValueError, "Integer conversion of " + field[1] + " failed. Exiting."
-    print fieldname + ':' + field[1]
+      raise ValueError, "Integer conversion of {0} failed.".format(field[1])
+    if self.args.verbose:
+      print fieldname + ':' + field[1]
     return value
 
-  def __init__(self, filename):
+  def __init__(self, filename, args):
     self.filename = filename
+    self.args = args
     try:
       self.file = open(filename, "r")
     except IOError as e:
@@ -86,7 +96,6 @@ class ArcInfoGridASCII(object):
     # of the upper right corner of the upper right grid square
     self.xur    = self.xll + self.ncols * self.cell
     self.yur    = self.yll + self.nrows * self.cell
-    #print self.xur, self.yur
 
   def cart2geo(self, row, col):  
     """Convert Cartesian row and column to geographic coordinates of upper left
@@ -172,15 +181,15 @@ class ExtentHandler(object):
 
 args = parser.parse_args()  # parse command line arguments
 
-print "Reading header..."
-hdr = ArcInfoGridASCII(args.infile)
+if args.verbose:
+  print "Reading header..."
+  hdr = ArcInfoGridASCII(args.infile, args)
 
 ext = ExtentHandler(hdr, args)
 
-print args.layer
 
-
-print "Reading array..."
+if args.verbose:
+  print "Reading array..."
 grid1D = np.fromfile(hdr.file, sep = " \n")
 
 # verify that the array can be reshaped
@@ -191,7 +200,8 @@ if hdr.ncols * hdr.nrows != items:
 		                  hdr.nrows, hdr.ncols)
 
 # reshape the array
-print "Reshaping array to grid..."
+if args.verbose:
+  print "Reshaping array to grid..."
 grid = np.reshape( grid1D, (hdr.nrows, hdr.ncols) )
 
 # create the shapefile
@@ -222,12 +232,13 @@ fieldef = ogr.FieldDefn( args.attr , ogr.OFTReal )
 if layer.CreateField ( fieldef ) != 0:
   raise ValueError, "OGR field definition failed."
 
-print 'Converting to shapefile...'
+if args.verbose:
+  print 'Converting to shapefile...'
 
 for row  in range(0, hdr.nrows):
   for col in range(0, hdr.ncols):
     v = grid[row][col]
-    if v != hdr.nodata and v > 0:
+    if v != hdr.nodata and (not args.nonzero or v != 0):
       lat, lon = hdr.cart2geo(row, col)
       if ext.compare(lon, lat):
         poly = hdr.createGridSquare(lon, lat)
@@ -237,7 +248,6 @@ for row  in range(0, hdr.nrows):
         if layer.CreateFeature(feature):
           raise ValueError, "Could not create feature in shapefile."
         feature.Destroy()
-
 
 ds.Destroy()
 

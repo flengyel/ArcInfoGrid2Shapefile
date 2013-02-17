@@ -32,34 +32,43 @@ ArcInfo Grid ASCII files, and by examination of converted files within GIS syste
     
 ## Usage ##
 ```
-usage: aig2shp.py [-h] [-a attribute] [-e minX minY maxX maxY] [-l LAYER]
-                     [--version] [--wgs84] [-x EXCLUDE]
-                     grid_ASCII_file ESRI_shapefile
+usage: aig2shp.py [-h] [-a attribute] [-e minX minY maxX maxY] [-l LAYER] [-n]
+                  [-v] [--version] [--wgs84]
+                  grid_ASCII_file ESRI_shapefile
 
-Create ESRI Shapefile grid poly coverage from Arcinfo Grid ASCII raster.
+Create ESRI Shapefile grid poly coverage from ArcInfo Grid ASCII raster.
 
-   positional arguments:
-     grid_ASCII_file       ArcInfo Grid ASCII input file.
-     ESRI_shapefile        ESRI shapefile output file.
+positional arguments:
+  grid_ASCII_file       ArcInfo Grid ASCII input file.
+  ESRI_shapefile        ESRI shapefile output file.
 
-   optional arguments:
-     -h, --help            show this help message and exit
-     -a attribute, --attr attribute
-                           Name of attribute for ArcInfo grid values. Defaults to
-                           "value."
-     -e minX minY maxX maxY, --extent minX minY maxX maxY
-                           Bounding box in geographic coordinates.
-     -l LAYER, --layer LAYER
-                           Shapefile layer name string.
-     --version             show program's version number and exit
-     --wgs84               Set spatial reference to WGS84/EPSG:4326 in shapefile
-                           layer. Projection file (.prj) is written out.
-     -x EXCLUDE, --exclude EXCLUDE
-                           Exclude zero.
+optional arguments:
+  -h, --help            show this help message and exit
+  -a attribute, --attr attribute
+                        Name of attribute for ArcInfo grid values. Defaults to
+                        "value."
+  -e minX minY maxX maxY, --extent minX minY maxX maxY
+                        Bounding box of subset of raster in geographic
+                        coordinates.
+  -l LAYER, --layer LAYER
+                        Shapefile layer name string.
+  -n, --nonzero         Exclude zero values.
+  -v, --verbose         Display verbose output.
+  --version             Show program version number and exit.
+  --wgs84               Set spatial reference to WGS84/EPSG:4326 in shapefile
+                        layer. Projection file (.prj) is written out.
 
-   (CC BY-NC-SA 3.0 US) 2013 Florian Lengyel, CUNY Environmental CrossRoads
-   Initiative, Advanced Science Research Center, The City College of New York.
-   Contact: gmail/skype/twitter florianlengyel.
+(CC BY-NC-SA 3.0 US) 2013 Florian Lengyel, CUNY Environmental CrossRoads
+Initiative, Advanced Science Research Center, The City College of New York.
+Contact: gmail/skype/twitter florianlengyel.
+```
+
+## Example ##
+In this example, cropland for a region including Africa was subsetted from the Ramankutty
+cropland raster data set [1] in ArcInfo Grid ASCII format, and used to produce a corresponding 
+shapefile. 
+``` 
+./aig2shp.py -e -34.892837 -17.338675  37.428152 57.845763 --wgs84 -n -v ramankutty_cropland2000_frac_5m.asc vector_squares.shp
 ```
 
 ## Author ##
@@ -71,3 +80,6 @@ Contact: gmail/skype/twitter florianlengyel
 ## License ##
 [Attribution-NonCommercial-ShareAlike 3.0 United States](http://creativecommons.org/licenses/by-nc-sa/3.0/us/)
 Full license in License.txt
+
+## References ##
+[1] Chad Monfreda, Navin Ramankutty,2 and Jonathan A. Foley. Farming the planet: 2. Geographic distribution of crop areas, yields, physiological types, and net primary production in the year 2000. GLOBAL BIOGEOCHEMICAL CYCLES, VOL. 22, GB1022, doi:10.1029/2007GB002947, 2008
