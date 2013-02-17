@@ -3,9 +3,12 @@ aig2shp.py: ArcInfo Grid ASCII to ESRI Shapefile conversion
 Vectorization of Arc Info Grid ASCII files as ESRI Shapefiles. 
 
 ## Author ##
-Florian Lengyel, Advanced Science Research Center, CUNY
+Florian Lengyel, [CUNY Environmental CrossRoads Initiative](http://asrc.cuny.edu/crossroads), 
+[Advanced Science Research Center](http://asrc.cuny.edu/crossroads),
+[The City College of New York](http://www.ccny.cuny.edu), [CUNY](http://www.cuny.edu).
+Contact: gmail/skype/twitter florianlengyel
 
-### Usage ###
+## Usage ##
 ```
 usage: aig2shp.py [-h] [-a attribute] [-e minX minY maxX maxY] [-l LAYER]
                      [--version] [--wgs84] [-x EXCLUDE]
@@ -34,6 +37,9 @@ Create ESRI Shapefile grid poly coverage from Arcinfo Grid ASCII raster.
 
    (CC BY-NC-SA 3.0 US) 2013 Florian Lengyel, CUNY Environmental CrossRoads
    Initiative, Advanced Science Research Center, The City College of New York.
-   Contact: gmail/twitter florianlengyel.
+   Contact: gmail/skype/twitter florianlengyel.
 ```
 
+## License ##
+[Attribution-NonCommercial-ShareAlike 3.0 United States](http://creativecommons.org/licenses/by-nc-sa/3.0/us/)
+Full license in License.txt
