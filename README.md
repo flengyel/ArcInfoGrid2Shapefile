@@ -4,8 +4,11 @@ Vectorization of ArcInfo Grid ASCII files as ESRI Shapefiles.
 Python program to convert an ArcInfo Grid ASCII raster file to an ESRI shapefile with 
 a single layer containing oriented grid square polygons centered at the pixels 
 of the grid, each containing an attribute value equal to the value of the corresponding 
-ArcInfo raster pixel. The ArcInfo Grid ASCII header cellsize <code>parameter</code> 
+ArcInfo raster pixel. The ArcInfo Grid ASCII header <code>cellsize</code> parameter
 determines the size of the grid squares. 
+
+The program was written to upload raster data in a format useable by 
+[CartoDB](http://www.cartodb.com). See the [following correspondence](https://groups.google.com/d/msg/cartodb/fbjRhgO-AMo/x8Mfy_Z_8DgJ) on the [CartoDB google group](https://groups.google.com/forum/?fromgroups=#!forum/cartodb).
 
 ## Notes on coordinates ##
 The following was determined from ESRI documentation of ArcInfo Grid ASCII files online, and 
