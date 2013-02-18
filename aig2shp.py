@@ -15,6 +15,7 @@ except:
 import os, sys
 import numpy as np
 import argparse as arg
+from progressbar import ProgressBar, Percentage, Bar
 
 # Define the arguments first
 descript = "Create ESRI Shapefile grid poly coverage from ArcInfo Grid ASCII raster."
@@ -36,6 +37,9 @@ parser.add_argument('-l', '--layer',
 parser.add_argument('-n', '--nonzero', 
 		    action="store_true",
 		    help='Exclude zero values.')
+parser.add_argument('-q', '--quiet', 
+		    action="store_true",
+		    help='Suppress progress bar.')
 parser.add_argument('-v', '--verbose', 
 		    action="store_true",
 		    help='Display verbose output.')
@@ -186,12 +190,13 @@ args = parser.parse_args()  # parse command line arguments
 
 if args.verbose:
   print "Reading header..."
-  hdr = ArcInfoGridASCII(args)
 
+hdr = ArcInfoGridASCII(args)
 ext = ExtentHandler(hdr, args)
 
 if args.verbose:
   print "Reading array..."
+
 grid1D = np.fromfile(hdr.file, sep = " \n")
 
 # verify that the array can be reshaped
@@ -237,6 +242,9 @@ if layer.CreateField ( fieldef ) != 0:
 if args.verbose:
   print 'Converting to shapefile...'
 
+if not args.quiet: # show the progress bar unless instructed otherwise
+  pbar = ProgressBar(widgets=[Percentage(), Bar()], maxval = hdr.nrows).start()
+
 for row  in range(0, hdr.nrows):
   for col in range(0, hdr.ncols):
     v = grid[row][col]
@@ -250,6 +258,11 @@ for row  in range(0, hdr.nrows):
         if layer.CreateFeature(feature):
           raise ValueError, "Could not create feature in shapefile."
         feature.Destroy()
+  if not args.quiet:
+    pbar.update(row+1)
+
+if not args.quiet:
+  pbar.finish()
 
 ds.Destroy()
 

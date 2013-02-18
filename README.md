@@ -76,6 +76,12 @@ shapefile.
 The shapefile was uploaded to CartoDB; a screenshot is shown below.
 [<img src="https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCropland.png">](https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCropland.png)
 
+## Dependencies ##
+* [ProgressBar](http://code.google.com/p/python-progressbar/)
+* GDAL, OGR python libraries
+* numpy
+* argparse
+
 ## Author ##
 Florian Lengyel, [CUNY Environmental CrossRoads Initiative](http://asrc.cuny.edu/crossroads), 
 [Advanced Science Research Center](http://asrc.cuny.edu/crossroads),
