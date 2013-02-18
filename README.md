@@ -81,12 +81,9 @@ Florian Lengyel, [CUNY Environmental CrossRoads Initiative](http://asrc.cuny.edu
 Contact: gmail/skype/twitter florianlengyel 
 
 ## License ##
-Original software is licensed under the 
-[MIT License](http://opensource.org/licenses/MIT): (c) 2013 Florian Lengyel.  
-All other original work is licensed under an  
-[Attribution-NonCommercial-ShareAlike 3.0 United States](http://creativecommons.org/licenses/by-nc-sa/3.0/us/) 
-Creative Commons License: (CC BY-NC-SA 3.0 US) 2013 Florian Lengyel. Derivative work is
-licensed accordingly.  Full license in License.txt.
+Original software is licensed under the [MIT License](http://opensource.org/licenses/MIT): (c) 2013 Florian Lengyel.  
+All other original work is licensed under an [Attribution-NonCommercial-ShareAlike 3.0 United States](http://creativecommons.org/licenses/by-nc-sa/3.0/us/) 
+Creative Commons License: (CC BY-NC-SA 3.0 US) 2013 Florian Lengyel. Derivative work is licensed accordingly.  Full license in License.txt.
 
 ## References ##
 [1] [Chad Monfreda, Navin Ramankutty and Jonathan A. Foley. Farming the planet: 2. Geographic distribution of crop areas, yields, physiological types, and net primary production in the year 2000. Global Biogeochemical Cycles. Volume 22, Issue 1, March 2008.](http://dx.doi.org/10.1029/2007GB002947)
