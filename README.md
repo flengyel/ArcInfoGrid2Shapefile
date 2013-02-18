@@ -78,8 +78,8 @@ The shapefile was uploaded to CartoDB; a screenshot is shown below.
 
 ## Dependencies ##
 * [ProgressBar](http://code.google.com/p/python-progressbar/)
-* GDAL, OGR python libraries
-* numpy
+* [GDAL 1.9.1](http://pypi.python.org/pypi/GDAL/) GDAL Python bindings
+* numpy 1.0.0 or greater
 * argparse
 
 ## Author ##
