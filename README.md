@@ -35,7 +35,7 @@ ArcInfo Grid ASCII files, and by examination of converted files within GIS syste
 ## Usage ##
 ```
 usage: aig2shp.py [-h] [-a attribute] [-e minX minY maxX maxY] [-l LAYER] [-n]
-                  [-v] [--version] [--wgs84]
+                  [-q] [-v] [--version] [--wgs84]
                   grid_ASCII_file ESRI_shapefile
 
 Create ESRI Shapefile grid poly coverage from ArcInfo Grid ASCII raster.
@@ -55,6 +55,7 @@ optional arguments:
   -l LAYER, --layer LAYER
                         Shapefile layer name string.
   -n, --nonzero         Exclude zero values.
+  -q, --quiet           Suppress progress bar.
   -v, --verbose         Display verbose output.
   --version             Show program version number and exit.
   --wgs84               Set spatial reference to WGS84/EPSG:4326 in shapefile
