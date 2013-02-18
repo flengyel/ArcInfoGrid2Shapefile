@@ -19,7 +19,7 @@ from progressbar import ProgressBar, Percentage, Bar
 
 # Define the arguments first
 descript = "Create ESRI Shapefile grid poly coverage from ArcInfo Grid ASCII raster."
-epistr   = "Software is released under The MIT License (c) 2013 Florian Lengyel. All other original work is licenced (CC BY-NC-SA 3.0 US) 2013 Florian Lengyel, CUNY Environmental CrossRoads Initiative, Advanced Science Research Center, The City College of New York. Contact: gmail/skype/twitter florianlengyel."
+epistr   = "Software is released under The MIT License (c) 2013 Florian Lengyel, CUNY Environmental CrossRoads Initiative, Advanced Science Research Center, The City College of New York. Contact: gmail/skype/twitter florianlengyel."
 parser  = arg.ArgumentParser( description = descript, epilog=epistr )
 # value of dest derived from first long opt
 parser.add_argument('-a', '--attr',

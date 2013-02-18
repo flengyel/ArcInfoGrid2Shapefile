@@ -61,8 +61,7 @@ optional arguments:
   --wgs84               Set spatial reference to WGS84/EPSG:4326 in shapefile
                         layer. Projection file (.prj) is written out.
 
-Software is released under The MIT License (c) 2013 Florian Lengyel. All other
-original work is licenced (CC BY-NC-SA 3.0 US) 2013 Florian Lengyel, CUNY
+Software is released under The MIT License (c) 2013 Florian Lengyel, CUNY
 Environmental CrossRoads Initiative, Advanced Science Research Center, The
 City College of New York. Contact: gmail/skype/twitter florianlengyel.
 ```
