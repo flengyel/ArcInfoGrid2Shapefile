@@ -1,4 +1,10 @@
 #!/usr/bin/python
+# aig2shp.py
+# Author: Florian Lengyel
+# Date: February 17, 2013
+# Contact: gmail/skype/twitter florianlengyel
+# License: MIT License (c) 2013 Florian Lengyel
+ 
 from __future__ import division
 try:
   from osgeo import ogr
@@ -8,9 +14,7 @@ except:
   import osr
 import os, sys
 import numpy as np
-#import pyproj as proj
 import argparse as arg
-
 
 # Define the arguments first
 descript = "Create ESRI Shapefile grid poly coverage from ArcInfo Grid ASCII raster."
@@ -67,14 +71,13 @@ class ArcInfoGridASCII(object):
     except:
       raise ValueError, "Integer conversion of {0} failed.".format(field[1])
     if self.args.verbose:
-      print fieldname + ':' + field[1]
+      print '{0}: {1}'.format(fieldname, field[1])
     return value
 
-  def __init__(self, filename, args):
-    self.filename = filename
+  def __init__(self, args):
     self.args = args
     try:
-      self.file = open(filename, "r")
+      self.file = open(args.infile, "r")
     except IOError as e:
       raise IOError, "I/O error({0}): {1}".format(e.errno, e.strerror)
     self.ncols  = self.getField("ncols", int)
@@ -183,10 +186,9 @@ args = parser.parse_args()  # parse command line arguments
 
 if args.verbose:
   print "Reading header..."
-  hdr = ArcInfoGridASCII(args.infile, args)
+  hdr = ArcInfoGridASCII(args)
 
 ext = ExtentHandler(hdr, args)
-
 
 if args.verbose:
   print "Reading array..."
