@@ -34,8 +34,8 @@ ArcInfo Grid ASCII files, and by examination of converted files within GIS syste
     
 ## Usage ##
 ```
-usage: aig2shp.py [-h] [-a attribute] [-e minX minY maxX maxY] [-l LAYER] [-n]
-                  [-q] [-v] [--version] [--wgs84]
+usage: aig2shp.py [-h] [-a attribute] [-e minX minY maxX maxY] [-l LAYER]
+                  [-m MULTIPLIER] [-n] [-q] [-v] [--version] [--wgs84]
                   grid_ASCII_file ESRI_shapefile
 
 Create ESRI Shapefile grid poly coverage from ArcInfo Grid ASCII raster.
@@ -54,6 +54,10 @@ optional arguments:
                         coordinates.
   -l LAYER, --layer LAYER
                         Shapefile layer name string.
+  -m MULTIPLIER, --multiplier MULTIPLIER
+                        Multiply attribute column by the multiplier and take
+                        integer part. Useful in conjunction with QGIS
+                        dissolve.
   -n, --nonzero         Exclude zero values.
   -q, --quiet           Suppress progress bar.
   -v, --verbose         Display verbose output.
@@ -67,9 +71,9 @@ City College of New York. Contact: gmail/skype/twitter florianlengyel.
 ```
 
 ## Example ##
-In this example, cropland for a region including Africa was subsetted from the Ramankutty
-cropland raster data set [1] in ArcInfo Grid ASCII format, and used to produce a corresponding 
-shapefile. 
+In this example, cropland for a region including Africa was subsetted from the 
+Ramankutty cropland raster data set [1] in ArcInfo Grid ASCII format, and used 
+to produce a corresponding shapefile. 
 ``` 
 ./aig2shp.py -e -34.892837 -17.338675  37.428152 57.845763 --wgs84 -n -v ramankutty_cropland2000_frac_5m.asc vector_squares.shp
 ```

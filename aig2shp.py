@@ -34,6 +34,9 @@ parser.add_argument('-e', '--extent',
 parser.add_argument('-l', '--layer', 
                     default='grid_value',
                     help='Shapefile layer name string.')
+parser.add_argument('-m', '--multiplier',
+		    type=int,
+		    help='Multiply attribute column by the multiplier and take integer part. Useful in conjunction with QGIS dissolve.')
 parser.add_argument('-n', '--nonzero', 
 		    action="store_true",
 		    help='Exclude zero values.')
@@ -253,6 +256,8 @@ for row  in range(0, hdr.nrows):
       if ext.compare(lon, lat):
         poly = hdr.createGridSquare(lon, lat)
         feature = ogr.Feature( layer.GetLayerDefn() )
+	if args.multiplier != None:
+	  v = int(v * args.multiplier)
         feature.SetField(args.attr, v)
         feature.SetGeometry(poly) # set the attribute
         if layer.CreateFeature(feature):
