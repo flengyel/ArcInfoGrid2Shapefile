@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 # aig2shp.py
 # Author: Florian Lengyel
 # Date: February 17, 2013
@@ -199,7 +200,50 @@ class ExtentHandler(object):
     return self.cmpFun(lat, lon)
 
 class Dissolver(object):
-  """Dissolve polygons in raster space. Uses box coordinates of pixels."""
+  """Dissolve polygons in raster space. Uses box coordinate representation
+     of abstract squares, vertex directions and oriented edges. Oriented
+     edges cancel, and vertex directions compose to define the endpoints
+     of polygons along the path defined by the vertex directions. (The 
+     oriented edges are probably unnecessary!)
+
+     The box coordinates of the pixel at (i, j) meaning row i, column j,
+     are denoted [r, c] and are related by r,c = 2*i+1, 2*j+1. The
+     meaning of upper left UL, upper right UR, lower left LL, lower right
+     LR, top edge, bot edge, left edge and right edge are define once
+     and for all in the following diagram. The definitions are intended
+     to comport with the orientation of raster space.
+
+      UL→   Top   UR↓       [r-1,c-1]  [r-1,c] [r-1,c+1]
+      Left  [r,c] Right     [r,c-1]    [r,c]   [r,c+1]
+      LL↑   Bot   LR←       [r+1,c-1]  [r+1,c] [r+1,c+1]
+  
+      Vertex coordinates are even in box coordinate space. The 
+      five vertex algebra elements {0, ↓,  →,  ←,  ↑} are assigned 
+      according to vertex algebra composition table below.
+      Note that initially, all vertices are zero.
+
+       +  |  0  ↓  →  ←  ↑ 
+       -----------------------
+       0  |  0  ↓  →  ←  ↑
+       ↓  |  ↓  0  →  ↓  0
+       →  |  →  →  0  0  ↑ 
+       ←  |  ←  ↓  0  0  ← 
+       ↑  |  ↑  0  ↑  ←  0
+
+
+       Note what happens when two adjacent boxes with
+       adjacent edges are combined: edges cancel, and vertex
+       directions compose:
+
+       →  1  ↓  +   →  1  ↓     →  1  →  1  ↓
+      -1     1  +  -1     1 =  -1           1 
+       ↑ -1  ←  +   ↑ -1  ←     ↑ -1  ← -1  ←     
+
+       Edge addition is ordinary addition; vertex addition is defined
+       above.  There is a flaw, however: vertex addition isn't associative. 
+       This means a modified encoding is needed.
+
+  """
 
   def pixel2box(self, i, j):
     """Box coordinates of pixel at raster coordinates (i, j)"""
@@ -246,20 +290,18 @@ class Dissolver(object):
     self.nextValid() # find the next valid box in raster/box coordinates
 
   def markTop(self, r, c):
-    # Top edge of box at   (i,j) is [2*i+1, 2*j]   orientation right +1 (away from origin)
-    self.box[r][c-1] += 1
+    # Top edge of box at [r,c] is [r-1, c] 
+    self.box[r-1][c] += 1
 
   def markRight(self, r, c):
-    # Right edge of box at  (i,j) is [2*i+2, 2*j+1] orientation +1 (down)
-    self.box[r+1][c] += 1
+    # Right edge of box at [r,c] is [r,c+1] 
+    self.box[r][c+1] += 1
 
   def markBot(self, r, c):
-    # Bottom edge of box at (i,j) is [2*i+1, 2*j+2] orientation left -1 (toward origin)
-    self.box[r][c+1] -= 1
+    self.box[r+1][c] -= 1
 
   def markLeft(self, r, c):
-    # Left edge of box at   (i,j) is [2*i, 2*j+1] orientation -1 (up to origin at upper left)
-    self.box[r-1][c] -= 1
+    self.box[r][c-1] -= 1
 
   def markBox(self, r, c):
     """Mark the square corresponding to pixel at (i,j)"""
