@@ -203,13 +203,28 @@ class Dissolver(object):
 
   def pixel2box(self, i, j):
     """Box coordinates of pixel at raster coordinates (i, j)"""
-    return ((i << 1) + 1, (j << 1) + 1)
+    return ((i<<1)+1, (j<<1)+1)
+
+  def box2pixel(self, r, c):
+    """Return pixel coordinates at box"""
+    return ((r-1)>>1, (c-1)>>1)
   
   def isValid(self, i, j):
     """True iff the pixel at (i, j) is not nodata and the box at [i, j] is unmarked."""
     r, c = self.pixel2box(i, j)
     print i, j, self.raster[i][j]
     return (self.raster[i][j] != self.hdr.nodata and self.box[r][c] == 0)
+
+  def nextValid(self):
+    # set cubical coordinates [r, c] of the next valid pixel
+    for row in range(self.i, hdr.nrows):
+      for col in range(self.j, hdr.ncols):
+	if self.isValid(row, col): 
+	  self.i = row # set pixel coordinates
+	  self.j = col
+          self.r, self.c = self.pixel2box(row, col)
+          return True
+    return False
 
   def __init__(self, args, hdr, ext, raster):
     """Create a Dissolver, using 
@@ -224,47 +239,68 @@ class Dissolver(object):
     self.raster = raster
     # Create the box coordinate space (i, j) -> [2*i+1, 2*j+1]
     # Square brackets denote box coordinates, parentheses denote pixel coordinates.
-    self.rows  = 2*hdr.nrows + 1
-    self.cols  = 2*hdr.ncols + 1
-    self.box   = np.zeros(shape=(self.rows, self.cols), dtype=np.int8) 
-    # set cubical coordinates [x, y] of the first valid pixel
-    for row in range(0, hdr.nrows):
-      for col in range(0, hdr.ncols):
-	if self.isValid(row, col): 
-          self.r, self.c = self.pixel2box(row, col)
-          break
-      else:
-        continue  # if loop exited normally (no break)
-      break   # if continue skipped
+    self.boxRows  = 2*hdr.nrows + 1
+    self.boxCols  = 2*hdr.ncols + 1
+    self.box   = np.zeros(shape=(self.boxRows, self.boxCols), dtype=np.int8) 
+    self.i = self.j = 0
+    self.nextValid() # find the next valid box in raster/box coordinates
 
   def markTop(self, r, c):
     # Top edge of box at   (i,j) is [2*i+1, 2*j]   orientation right +1 (away from origin)
-    box[r][c-1] += 1
+    self.box[r][c-1] += 1
 
   def markRight(self, r, c):
     # Right edge of box at  (i,j) is [2*i+2, 2*j+1] orientation +1 (down)
-    box[r+1][c] += 1
+    self.box[r+1][c] += 1
 
   def markBot(self, r, c):
     # Bottom edge of box at (i,j) is [2*i+1, 2*j+2] orientation left -1 (toward origin)
-    box[r][c+1] -= 1
+    self.box[r][c+1] -= 1
 
   def markLeft(self, r, c):
     # Left edge of box at   (i,j) is [2*i, 2*j+1] orientation -1 (up to origin at upper left)
-    box[r-1][c] -= 1
+    self.box[r-1][c] -= 1
 
-  def markBox(self, i, j):
+  def markBox(self, r, c):
     """Mark the square corresponding to pixel at (i,j)"""
-    r, c = pixel2box(i, j)  # get the box coordinates of pixel
-    box[r][c] = 1          # mark the box visited
+    self.box[r][c] = 1          # mark the box visited
     self.markTop(r, c)
     self.markRight(r, c)
     self.markBot(r, c)
     self.markLeft(r, c)
 
+  def upOK(self, r, c):
+    return r-2 >= 0
 
-# def defBoundary(self, i, j):
-#   """Assume that i, j are the pixel coordinates of a non-nodata value"""
+  def downOK(self, r, c):
+    return r+2 < self.boxRows
+
+  def leftOK(self, r, c):
+    return c-2 >= 0
+
+  def rightOK(self, r, c):
+    return c+2 < self.boxCols
+
+  def defBoundary(self, r, c, v):
+    """Define the boundary at the box"""
+
+    def adjacent(r, c, v):
+      if self.box[r][c] == 0:  # Edge case: do not proceed if box is marked
+        i,j = self.box2pixel(r, c)
+	p = self.raster[i][j]
+        if p != self.hdr.nodata and p == v: # check for novalue redundant
+          self.defBoundary(r, c, v) 
+
+    self.markBox(r, c)  # mark the box
+
+    if self.upOK(r, c):
+      adjacent(r-2, c, v)
+    if self.downOK(r, c):
+      adjacent(r+2, c, v)
+    if self.leftOK(r, c):
+      adjacent(r, c-2, v)
+    if self.rightOK(r, c):
+      adjacent(r, c+2, v)
      
 
 
@@ -349,7 +385,14 @@ else:
   print 'Dissolve not implemented!'
   dis = Dissolver(args, hdr, ext, grid) 
   print grid
-  print dis.r, dis.c, (dis.r-1)>>1, (dis.c-1)>>1, grid[(dis.r-1)>>1][(dis.c-1)>>1]
+  i, j = dis.box2pixel(dis.r, dis.c)
+  print dis.r, dis.c, i, j, grid[i][j]
+
+  dis.defBoundary(dis.r, dis.c, grid[i][j])
+  print dis.box
+  dis.nextValid()
+  dis.defBoundary(dis.r, dis.c, grid[i][j])
+  print dis.box
 
 if not args.quiet:
   pbar.finish()

@@ -34,7 +34,7 @@ ArcInfo Grid ASCII files, and by examination of converted files within GIS syste
     
 ## Usage ##
 ```
-usage: aig2shp.py [-h] [-a attribute] [-e minX minY maxX maxY] [-l LAYER]
+usage: aig2shp.py [-h] [-a attribute] [-d] [-e minX minY maxX maxY] [-l LAYER]
                   [-m MULTIPLIER] [-n] [-q] [-v] [--version] [--wgs84]
                   grid_ASCII_file ESRI_shapefile
 
@@ -49,6 +49,8 @@ optional arguments:
   -a attribute, --attr attribute
                         Name of attribute for ArcInfo grid values. Defaults to
                         "value."
+  -d, --dissolve        Dissolve Arc Info ASCII Grid in (row, col) space
+                        before converting to shapefile.
   -e minX minY maxX maxY, --extent minX minY maxX maxY
                         Bounding box of subset of raster in geographic
                         coordinates.
