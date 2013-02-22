@@ -26,6 +26,9 @@ parser.add_argument('-a', '--attr',
                     metavar='attribute',
 		    default='value',
 		    help='Name of attribute for ArcInfo grid values. Defaults to "value."')
+parser.add_argument('-d', '--dissolve',
+		    action='store_true',
+		    help='Dissolve Arc Info ASCII Grid in (row, col) space before converting to shapefile.')
 parser.add_argument('-e', '--extent', 
 		    nargs=4, 
 		    type=float,
@@ -117,6 +120,12 @@ class ArcInfoGridASCII(object):
     y = self.yOrigin - row * self.cell
     return (x, y)
 
+  def geo2cart(self, x, y):  # occasionally not correct -- don't convert back!
+    """Inverse transform of cart2geo."""
+    col = int( ( x - self.xOrigin ) / self.cell )
+    row = int( ( self.yOrigin - y ) / self.cell )
+    return (row, col)
+
   def createGridSquare(self, lon, lat): 
     """Return wkb polygon with coordinates of grid square. Associate attribute"""
     ring = ogr.Geometry(ogr.wkbLinearRing)  # geometry for grid square
@@ -189,6 +198,76 @@ class ExtentHandler(object):
   def compare(self, lat, lon):
     return self.cmpFun(lat, lon)
 
+class Dissolver(object):
+  """Dissolve polygons in raster space. Uses box coordinates of pixels."""
+
+  def pixel2box(self, i, j):
+    """Box coordinates of pixel at raster coordinates (i, j)"""
+    return ((i << 1) + 1, (j << 1) + 1)
+  
+  def isValid(self, i, j):
+    """True iff the pixel at (i, j) is not nodata and the box at [i, j] is unmarked."""
+    r, c = self.pixel2box(i, j)
+    print i, j, self.raster[i][j]
+    return (self.raster[i][j] != self.hdr.nodata and self.box[r][c] == 0)
+
+  def __init__(self, args, hdr, ext, raster):
+    """Create a Dissolver, using 
+       args -- parsed arguments 
+       hdr  -- Grid ASCII header 
+       ext  -- extent of grid in coordinate space
+       raster -- reshaped grid"""
+
+    self.args = args
+    self.hdr  = hdr
+    self.ext  = ext
+    self.raster = raster
+    # Create the box coordinate space (i, j) -> [2*i+1, 2*j+1]
+    # Square brackets denote box coordinates, parentheses denote pixel coordinates.
+    self.rows  = 2*hdr.nrows + 1
+    self.cols  = 2*hdr.ncols + 1
+    self.box   = np.zeros(shape=(self.rows, self.cols), dtype=np.int8) 
+    # set cubical coordinates [x, y] of the first valid pixel
+    for row in range(0, hdr.nrows):
+      for col in range(0, hdr.ncols):
+	if self.isValid(row, col): 
+          self.r, self.c = self.pixel2box(row, col)
+          break
+      else:
+        continue  # if loop exited normally (no break)
+      break   # if continue skipped
+
+  def markTop(self, r, c):
+    # Top edge of box at   (i,j) is [2*i+1, 2*j]   orientation right +1 (away from origin)
+    box[r][c-1] += 1
+
+  def markRight(self, r, c):
+    # Right edge of box at  (i,j) is [2*i+2, 2*j+1] orientation +1 (down)
+    box[r+1][c] += 1
+
+  def markBot(self, r, c):
+    # Bottom edge of box at (i,j) is [2*i+1, 2*j+2] orientation left -1 (toward origin)
+    box[r][c+1] -= 1
+
+  def markLeft(self, r, c):
+    # Left edge of box at   (i,j) is [2*i, 2*j+1] orientation -1 (up to origin at upper left)
+    box[r-1][c] -= 1
+
+  def markBox(self, i, j):
+    """Mark the square corresponding to pixel at (i,j)"""
+    r, c = pixel2box(i, j)  # get the box coordinates of pixel
+    box[r][c] = 1          # mark the box visited
+    self.markTop(r, c)
+    self.markRight(r, c)
+    self.markBot(r, c)
+    self.markLeft(r, c)
+
+
+# def defBoundary(self, i, j):
+#   """Assume that i, j are the pixel coordinates of a non-nodata value"""
+     
+
+
 args = parser.parse_args()  # parse command line arguments
 
 if args.verbose:
@@ -248,23 +327,29 @@ if args.verbose:
 if not args.quiet: # show the progress bar unless instructed otherwise
   pbar = ProgressBar(widgets=[Percentage(), Bar()], maxval = hdr.nrows).start()
 
-for row  in range(0, hdr.nrows):
-  for col in range(0, hdr.ncols):
-    v = grid[row][col]
-    if v != hdr.nodata and (not args.nonzero or v != 0):
-      lat, lon = hdr.cart2geo(row, col)
-      if ext.compare(lon, lat):
-        poly = hdr.createGridSquare(lon, lat)
-        feature = ogr.Feature( layer.GetLayerDefn() )
-	if args.multiplier != None:
-	  v = int(v * args.multiplier)
-        feature.SetField(args.attr, v)
-        feature.SetGeometry(poly) # set the attribute
-        if layer.CreateFeature(feature):
-          raise ValueError, "Could not create feature in shapefile."
-        feature.Destroy()
-  if not args.quiet:
-    pbar.update(row+1)
+if not args.dissolve:
+  for row  in range(0, hdr.nrows):
+    for col in range(0, hdr.ncols):
+      v = grid[row][col]
+      if v != hdr.nodata and (not args.nonzero or v != 0):
+        lon, lat = hdr.cart2geo(row, col) # Note reversal!
+        if ext.compare(lat, lon):
+          poly = hdr.createGridSquare(lat, lon)
+          feature = ogr.Feature( layer.GetLayerDefn() )
+          if args.multiplier != None:
+	    v = int(v * args.multiplier)
+          feature.SetField(args.attr, v)
+          feature.SetGeometry(poly) # set the attribute
+          if layer.CreateFeature(feature):
+            raise ValueError, "Could not create feature in shapefile."
+          feature.Destroy()
+    if not args.quiet:
+      pbar.update(row+1)
+else:
+  print 'Dissolve not implemented!'
+  dis = Dissolver(args, hdr, ext, grid) 
+  print grid
+  print dis.r, dis.c, (dis.r-1)>>1, (dis.c-1)>>1, grid[(dis.r-1)>>1][(dis.c-1)>>1]
 
 if not args.quiet:
   pbar.finish()
