@@ -278,6 +278,9 @@ class Dissolver(object):
     self.rowMap = { vx.r : 0, vx.d : 1, vx.l : 0, vx.u : -1 }
     self.colMap = { vx.r : 1, vx.d : 0, vx.l : -1, vx.u : 0 }
 
+    # used for diagnostics
+    self.dirMap = { 0: '?', vx.r : 'r', vx.d : 'd', vx.l : 'l', vx.u : 'u' }
+
     # define the vertex composition via maps
 
     """
@@ -418,7 +421,7 @@ class Dissolver(object):
     r = r + self.rowMap[vrtx]
     c = c + self.colMap[vrtx]   
 
-    print 'Direction {0} at edge [{1},{2}]'.format(vrtx, r, c)
+    print 'Direction {0} at edge [{1},{2}]'.format(self.dirMap[vrtx], r, c)
 
     # reset the edge
     self.box[r][c] = 0      
@@ -456,7 +459,7 @@ class Dissolver(object):
       r = r + self.rowMap[vrtx]
       c = c + self.colMap[vrtx]   
 
-      print 'Direction {0} at edge [{1},{2}]'.format(vrtx, r, c)
+      print 'Direction {0} at edge [{1},{2}]'.format(self.dirMap[vrtx], r, c)
 
       # reset the edge
       self.box[r][c] = 0      
