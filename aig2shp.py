@@ -317,18 +317,24 @@ class Dissolver(object):
   def isValid(self, i, j):
     """True iff the pixel at (i, j) is not nodata and the box at [i, j] is unmarked."""
     r, c = self.pixel2box(i, j)
-    print i, j, self.raster[i][j]
+    #print i, j, self.raster[i][j]
     return (self.raster[i][j] != self.hdr.nodata and self.box[r][c] == 0)
 
   def nextValid(self):
-    # set cubical coordinates [r, c] of the next valid pixel
-    for row in range(self.i, hdr.nrows):
-      for col in range(self.j, hdr.ncols):
-	if self.isValid(row, col): 
-	  self.i = row # set pixel coordinates
-	  self.j = col
-          self.r, self.c = self.pixel2box(row, col)
-          return True
+    # 1et cubical coordinates [r, c] of the next valid pixel
+    row = self.i  # exhaust the current row
+    for col in range(self.j, hdr.ncols):
+      if self.isValid(row, col):
+	 self.i, self.j = row, col
+	 self.r, self.c = self.pixel2box(row, col)
+	 return True
+    # continue with remaining rows
+    for row in range(self.i+1, hdr.nrows):
+      for col in range(0, hdr.ncols):
+        if self.isValid(row, col):
+	 self.i, self.j = row, col
+	 self.r, self.c = self.pixel2box(row, col)
+	 return True
     return False
 
   def markTop(self, r, c):
@@ -372,6 +378,8 @@ class Dissolver(object):
 
   # note: you may wish to generalize the test by passing a boolean-valued
   # function v and checking if v(p) holds.
+  # Recusion easily exceeds sys.getstacklimit() for actual files
+  # use a local checking method.
   def defBoundary(self, r, c, v):
     """Define the boundary at the box"""
 
@@ -552,16 +560,17 @@ else:
   print 'Dissolve not implemented!'
   dis = Dissolver(args, hdr, ext, grid) 
   print grid
-  dis.nextValid() # find the next valid box in raster/box coordinates
-  # (dis.r, dis.c) defined
-  i, j = dis.box2pixel(dis.r, dis.c)
-  print dis.r, dis.c, i, j, grid[i][j]
+  while dis.nextValid(): # find the next valid box in raster/box coordinates
+    # (dis.r, dis.c) defined
+    i, j = dis.box2pixel(dis.r, dis.c)
+    print dis.r, dis.c, i, j, grid[i][j]
 
-  dis.defBoundary(dis.r, dis.c, grid[i][j])
-  print dis.box
+    # compute the boundary
+    dis.defBoundary(dis.r, dis.c, grid[i][j])
+    print dis.box
 
-  dis.traverse()
-  print dis.box
+    dis.traverse() # traverse boundary
+    print dis.box
 
 if not args.quiet:
   pbar.finish()
