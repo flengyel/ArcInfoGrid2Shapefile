@@ -273,9 +273,15 @@ class Dissolver(object):
     self.box   = np.zeros(shape=(self.boxRows, self.boxCols), dtype=np.int8) 
     self.i = self.j = 0
 
+    # define the vertex composition via maps
 
-
-    self.nextValid() # find the next valid box in raster/box coordinates
+    self.map0  = { 0 : 0,    vx.d : vx.d, vx.r : vx.r, vx.l : vx.l, vx.u : vx.u }
+    self.mapd  = { 0 : vx.d, vx.d : 0,    vx.r : vx.r, vx.l : vx.d, vx.u : 0 }
+    self.mapr  = { 0 : vx.r, vx.d : vx.r, vx.r : 0,    vx.l : 0, vx.u : vx.u }
+    self.mapl  = { 0 : vx.l, vx.d : vx.d, vx.r : 0,    vx.l : 0, vx.u : vx.l }
+    self.mapu  = { 0 : vx.u, vx.d : 0,    vx.r : vx.u, vx.l : vx.l, vx.u : 0 }
+    self.opmap = { 0 : self.map0, vx.d : self.mapd, vx.r : self.mapr, 
+		                  vx.l : self.mapl, vx.u : self.mapu } 
 
   def op(self, v, w):
     """Compute vertex algebra composition.  The composition table, again, is
@@ -289,35 +295,12 @@ class Dissolver(object):
      u  |  u  0  u  l  0
 
     """
-    if min(v,w) == 0: # zero element
-      return max(v, w)
-    if v == w:  # diagonal
-      return 0
-    if v == vx.d:
-      if w == vx.r:
-	return vx.r
-      if w == vx.l:
-        return vx.d
-      return 0
-    if v == vx.r:
-      if w == vx.d:
-        return vx.r
-      if w == vx.u:
-	return vx.u
-      return 0
-    if v == vx.l:
-      if w == vx.d:
-        return vx.d
-      if w == vx.u:
-	return vx.l
-      return 0
-    if v == vx.u:
-      if w == vx.r:
-	return vx.u
-      if w == vx.l:
-	return vx.l
-      return 0
-    raise ValueError, 'Vertex composition operator {0} or {1} out of range.'.format(v, w)
+    return self.opmap[v][w]
+    try:
+      x = self.opmap[v][w]
+    except KeyError:
+      raise ValueError, 'Vertex composition operator {0} or {1} out of range.'.format(v, w)
+    return x
 
 
   def pixel2box(self, i, j):
@@ -372,7 +355,6 @@ class Dissolver(object):
     self.box[r+1][c+1] = self.op(self.box[r+1][c+1], vx.l)
     self.box[r+1][c-1] = self.op(self.box[r+1][c-1], vx.u)
 
-
   def upOK(self, r, c):
     return r-2 >= 0
 
@@ -385,6 +367,8 @@ class Dissolver(object):
   def rightOK(self, r, c):
     return c+2 < self.boxCols
 
+  # note: you may wish to generalize the test by passing a boolean-valued
+  # function v and checking if v(p) holds.
   def defBoundary(self, r, c, v):
     """Define the boundary at the box"""
 
@@ -406,6 +390,90 @@ class Dissolver(object):
     if self.rightOK(r, c):
       adjacent(r, c+2, v)
      
+  def traverse(self): 
+    """Traverse and build a polygon."""	  
+    # Vertex directions govern where to move. 0 is a special case
+    # that must be checked for first
+    self.rowMap = { vx.r : 0, vx.d : 1, vx.l : 0, vx.u : -1 }
+    self.colMap = { vx.r : 1, vx.d : 0, vx.l : -1, vx.u : 0 }
+
+    # move to upper left vertex
+    r = self.r - 1
+    c = self.c - 1
+
+    print 'Writing vertex [{0}, {1}]'.format(r,c)
+
+    r0, c0 = r, c          # remember the initial vertex [r0, c0]
+    vrtx = self.box[r][c]  # get the direction
+    self.box[r][c] = 0     # reset the vertex in box
+
+    if vrtx == 0:     # uh oh: hunt for direction 
+      # from perspective of vertex, is edge oriented the same way?
+      # if so, choose this direction.
+      for d in (vx.r, vx.d, vx.l, vx.u):
+        edge = self.box[r+self.rowMap[d]][c+self.colMap[d]]
+	if edge == self.rowMap[d] + self.colMap[d]:
+          vrtx = d
+	  break
+      if vrtx == 0:
+	raise ValueError, 'Logic error: nowhere to go from [{0},{1}]'.format(r,c)
+
+    # now you have a valid direction -- move to edge
+    r = r + self.rowMap[vrtx]
+    c = c + self.colMap[vrtx]   
+
+    print 'Direction {0} at edge [{1},{2}]'.format(vrtx, r, c)
+
+    # reset the edge
+    self.box[r][c] = 0      
+
+    # move to the next vertex
+    r = r + self.rowMap[vrtx]
+    c = c + self.colMap[vrtx]   
+    vrtx0 = vrtx   # save the previous direction -- it's valid.
+
+    while r != r0 and c != c0:
+      vrtx  = self.box[r][c]  # get the new direction
+      self.box[r][c] = 0  # reset the vertex in box
+      # need to check if vrtx is valid
+      # if not, make it valid
+      # then check whether it is the same direction as vrtx0
+      # if not, write out the new vertex
+      # in any case, update the 
+
+      if vrtx == 0:     # uh oh: hunt for direction 
+        # from perspective of vertex, is edge oriented the same way?
+        # if so, choose this direction.
+        for d in (vx.r, vx.d, vx.l, vx.u):
+          edge = self.box[r+self.rowMap[d]][c+self.colMap[d]]
+	  if edge == self.rowMap[d] + self.colMap[d]:
+            vrtx = d
+	    break
+        if vrtx == 0:
+	  raise ValueError, 'Logic error: nowhere to go from [{0},{1}]'.format(r,c)
+
+      # now vrtex is valid. Check if the vertex should be written out.
+      if vrtx != vrtx0:
+	# turning point
+        print 'Writing vertex [{0}, {1}]'.format(r,c)
+
+
+      # now you have a valid direction -- move to edge
+      r = r + self.rowMap[vrtx]
+      c = c + self.colMap[vrtx]   
+
+      print 'Direction {0} at edge [{1},{2}]'.format(vrtx, r, c)
+
+      # reset the edge
+      self.box[r][c] = 0      
+
+      # move to the next vertex
+      r = r + self.rowMap[vrtx]
+      c = c + self.colMap[vrtx]   
+
+      vrtx0 = vrtx   # save the previous direction -- it's valid.
+
+# end of traverse  -- now for fireworks!!
 
 args = parser.parse_args()  # parse command line arguments
 
@@ -488,12 +556,11 @@ else:
   print 'Dissolve not implemented!'
   dis = Dissolver(args, hdr, ext, grid) 
   print grid
+  dis.nextValid() # find the next valid box in raster/box coordinates
+  # (dis.r, dis.c) defined
   i, j = dis.box2pixel(dis.r, dis.c)
   print dis.r, dis.c, i, j, grid[i][j]
 
-  dis.defBoundary(dis.r, dis.c, grid[i][j])
-  print dis.box
-  dis.nextValid()
   dis.defBoundary(dis.r, dis.c, grid[i][j])
   print dis.box
 
