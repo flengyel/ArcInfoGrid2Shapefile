@@ -273,19 +273,14 @@ class Dissolver(object):
     self.box   = np.zeros(shape=(self.boxRows, self.boxCols), dtype=np.int8) 
     self.i = self.j = 0
 
+    # Vertex directions govern where to move. 0 is a special case
+    # that must be checked for first
+    self.rowMap = { vx.r : 0, vx.d : 1, vx.l : 0, vx.u : -1 }
+    self.colMap = { vx.r : 1, vx.d : 0, vx.l : -1, vx.u : 0 }
+
     # define the vertex composition via maps
 
-    self.map0  = { 0 : 0,    vx.d : vx.d, vx.r : vx.r, vx.l : vx.l, vx.u : vx.u }
-    self.mapd  = { 0 : vx.d, vx.d : 0,    vx.r : vx.r, vx.l : vx.d, vx.u : 0 }
-    self.mapr  = { 0 : vx.r, vx.d : vx.r, vx.r : 0,    vx.l : 0, vx.u : vx.u }
-    self.mapl  = { 0 : vx.l, vx.d : vx.d, vx.r : 0,    vx.l : 0, vx.u : vx.l }
-    self.mapu  = { 0 : vx.u, vx.d : 0,    vx.r : vx.u, vx.l : vx.l, vx.u : 0 }
-    self.opmap = { 0 : self.map0, vx.d : self.mapd, vx.r : self.mapr, 
-		                  vx.l : self.mapl, vx.u : self.mapu } 
-
-  def op(self, v, w):
-    """Compute vertex algebra composition.  The composition table, again, is
-
+    """
      +  |  0  d  r  l  u 
      -----------------------
      0  |  0  d  r  l  u
@@ -295,12 +290,17 @@ class Dissolver(object):
      u  |  u  0  u  l  0
 
     """
+    self.map0  = { 0 : 0,    vx.d : vx.d, vx.r : vx.r, vx.l : vx.l, vx.u : vx.u }
+    self.mapd  = { 0 : vx.d, vx.d : 0,    vx.r : vx.r, vx.l : vx.d, vx.u : 0 }
+    self.mapr  = { 0 : vx.r, vx.d : vx.r, vx.r : 0,    vx.l : 0, vx.u : vx.u }
+    self.mapl  = { 0 : vx.l, vx.d : vx.d, vx.r : 0,    vx.l : 0, vx.u : vx.l }
+    self.mapu  = { 0 : vx.u, vx.d : 0,    vx.r : vx.u, vx.l : vx.l, vx.u : 0 }
+    self.opmap = { 0 : self.map0, vx.d : self.mapd, vx.r : self.mapr, 
+		                  vx.l : self.mapl, vx.u : self.mapu } 
+
+  def op(self, v, w):
+    """Compute vertex algebra composition.""" 
     return self.opmap[v][w]
-    try:
-      x = self.opmap[v][w]
-    except KeyError:
-      raise ValueError, 'Vertex composition operator {0} or {1} out of range.'.format(v, w)
-    return x
 
 
   def pixel2box(self, i, j):
@@ -392,10 +392,6 @@ class Dissolver(object):
      
   def traverse(self): 
     """Traverse and build a polygon."""	  
-    # Vertex directions govern where to move. 0 is a special case
-    # that must be checked for first
-    self.rowMap = { vx.r : 0, vx.d : 1, vx.l : 0, vx.u : -1 }
-    self.colMap = { vx.r : 1, vx.d : 0, vx.l : -1, vx.u : 0 }
 
     # move to upper left vertex
     r = self.r - 1
@@ -432,7 +428,7 @@ class Dissolver(object):
     c = c + self.colMap[vrtx]   
     vrtx0 = vrtx   # save the previous direction -- it's valid.
 
-    while r != r0 and c != c0:
+    while r != r0 or c != c0:
       vrtx  = self.box[r][c]  # get the new direction
       self.box[r][c] = 0  # reset the vertex in box
       # need to check if vrtx is valid
@@ -456,8 +452,6 @@ class Dissolver(object):
       if vrtx != vrtx0:
 	# turning point
         print 'Writing vertex [{0}, {1}]'.format(r,c)
-
-
       # now you have a valid direction -- move to edge
       r = r + self.rowMap[vrtx]
       c = c + self.colMap[vrtx]   
@@ -470,7 +464,6 @@ class Dissolver(object):
       # move to the next vertex
       r = r + self.rowMap[vrtx]
       c = c + self.colMap[vrtx]   
-
       vrtx0 = vrtx   # save the previous direction -- it's valid.
 
 # end of traverse  -- now for fireworks!!
@@ -562,6 +555,9 @@ else:
   print dis.r, dis.c, i, j, grid[i][j]
 
   dis.defBoundary(dis.r, dis.c, grid[i][j])
+  print dis.box
+
+  dis.traverse()
   print dis.box
 
 if not args.quiet:
