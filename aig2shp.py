@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+# DO NOT REMOVE THE SECOND LINE!
 # aig2shp.py
 # Author: Florian Lengyel
 # Date: February 17, 2013
@@ -199,6 +200,14 @@ class ExtentHandler(object):
   def compare(self, lat, lon):
     return self.cmpFun(lat, lon)
 
+
+# a StackExchange creation
+def enum(**enums):
+  return type('Enum', (), enums)
+
+# adds globals -- 
+vx = enum(z=0, r=1, d=2, l=3, u=4)
+
 class Dissolver(object):
   """Dissolve polygons in raster space. Uses box coordinate representation
      of abstract squares, vertex directions and oriented edges. Oriented
@@ -241,16 +250,82 @@ class Dissolver(object):
 
        Edge addition is ordinary addition; vertex addition is defined
        above.  There is a flaw, however: vertex addition isn't associative. 
-       This means a modified encoding is needed.
-
+       The compromise is to say that a vertex direction is valid if it
+       is incident to two nonzero edges. Sometimes the operations will leave
+       some isolated verted directions. These won't count for traversal.
   """
 
+  def __init__(self, args, hdr, ext, raster):
+    """Create a Dissolver, using 
+       args -- parsed arguments 
+       hdr  -- Grid ASCII header 
+       ext  -- extent of grid in coordinate space
+       raster -- reshaped grid"""
+
+    self.args = args
+    self.hdr  = hdr
+    self.ext  = ext
+    self.raster = raster
+    # Create the box coordinate space (i, j) -> [2*i+1, 2*j+1]
+    # Square brackets denote box coordinates, parentheses denote pixel coordinates.
+    self.boxRows  = 2*hdr.nrows + 1
+    self.boxCols  = 2*hdr.ncols + 1
+    self.box   = np.zeros(shape=(self.boxRows, self.boxCols), dtype=np.int8) 
+    self.i = self.j = 0
+
+
+
+    self.nextValid() # find the next valid box in raster/box coordinates
+
+  def op(self, v, w):
+    """Compute vertex algebra composition.  The composition table, again, is
+
+     +  |  0  d  r  l  u 
+     -----------------------
+     0  |  0  d  r  l  u
+     d  |  d  0  r  d  0
+     r  |  r  r  0  0  u 
+     l  |  l  d  0  0  l 
+     u  |  u  0  u  l  0
+
+    """
+    if min(v,w) == 0: # zero element
+      return max(v, w)
+    if v == w:  # diagonal
+      return 0
+    if v == vx.d:
+      if w == vx.r:
+	return vx.r
+      if w == vx.l:
+        return vx.d
+      return 0
+    if v == vx.r:
+      if w == vx.d:
+        return vx.r
+      if w == vx.u:
+	return vx.u
+      return 0
+    if v == vx.l:
+      if w == vx.d:
+        return vx.d
+      if w == vx.u:
+	return vx.l
+      return 0
+    if v == vx.u:
+      if w == vx.r:
+	return vx.u
+      if w == vx.l:
+	return vx.l
+      return 0
+    raise ValueError, 'Vertex composition operator {0} or {1} out of range.'.format(v, w)
+
+
   def pixel2box(self, i, j):
-    """Box coordinates of pixel at raster coordinates (i, j)"""
+    """Box coordinates [r, c] of pixel at raster coordinates (i, j)"""
     return ((i<<1)+1, (j<<1)+1)
 
   def box2pixel(self, r, c):
-    """Return pixel coordinates at box"""
+    """Return pixel coordinates (i,j) of box at box coordinates [r,c]"""
     return ((r-1)>>1, (c-1)>>1)
   
   def isValid(self, i, j):
@@ -270,25 +345,6 @@ class Dissolver(object):
           return True
     return False
 
-  def __init__(self, args, hdr, ext, raster):
-    """Create a Dissolver, using 
-       args -- parsed arguments 
-       hdr  -- Grid ASCII header 
-       ext  -- extent of grid in coordinate space
-       raster -- reshaped grid"""
-
-    self.args = args
-    self.hdr  = hdr
-    self.ext  = ext
-    self.raster = raster
-    # Create the box coordinate space (i, j) -> [2*i+1, 2*j+1]
-    # Square brackets denote box coordinates, parentheses denote pixel coordinates.
-    self.boxRows  = 2*hdr.nrows + 1
-    self.boxCols  = 2*hdr.ncols + 1
-    self.box   = np.zeros(shape=(self.boxRows, self.boxCols), dtype=np.int8) 
-    self.i = self.j = 0
-    self.nextValid() # find the next valid box in raster/box coordinates
-
   def markTop(self, r, c):
     # Top edge of box at [r,c] is [r-1, c] 
     self.box[r-1][c] += 1
@@ -306,10 +362,16 @@ class Dissolver(object):
   def markBox(self, r, c):
     """Mark the square corresponding to pixel at (i,j)"""
     self.box[r][c] = 1          # mark the box visited
-    self.markTop(r, c)
+    self.markTop(r, c)          # apply the edge algebra
     self.markRight(r, c)
     self.markBot(r, c)
     self.markLeft(r, c)
+    # also, apply the vertex algebra
+    self.box[r-1][c-1] = self.op(self.box[r-1][c-1], vx.r)
+    self.box[r-1][c+1] = self.op(self.box[r-1][c+1], vx.d)
+    self.box[r+1][c+1] = self.op(self.box[r+1][c+1], vx.l)
+    self.box[r+1][c-1] = self.op(self.box[r+1][c-1], vx.u)
+
 
   def upOK(self, r, c):
     return r-2 >= 0
@@ -344,7 +406,6 @@ class Dissolver(object):
     if self.rightOK(r, c):
       adjacent(r, c+2, v)
      
-
 
 args = parser.parse_args()  # parse command line arguments
 
