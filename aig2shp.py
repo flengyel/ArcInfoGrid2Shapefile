@@ -275,6 +275,14 @@ class Dissolver(object):
 
   def move(self, r, c, v):
     """recompute box coordinates using the mov enum"""
+    if self.args.verbosity >= 7:
+      r1 = r + self.goR[v]
+      c1 = c + self.goC[v]
+      edr = (r + r1) >> 1
+      edc = (c + c1) >> 1
+      self.box[edr][edc] -= 1
+      if self.box[edr][edc] < -2:
+        raise ValueError, 'Edge [{0},{1}] visited more than twice.'.format(edr,edc)
     return (r + self.goR[v], c + self.goC[v])
 
   def isBoxCoord(self, r, c):
@@ -323,35 +331,27 @@ class Dissolver(object):
     """
     self.box[r][c] = 1
 
-  def isInside(self, r, c, v, cls):
+  def isInOut(self, isIn, r, c, v, cls):
     """True if the square clockwise from v at [r, c] exists and
        is in the class cls; false otherwise. Marks square if true."""
-    r += self.insideR[v]
-    c += self.insideC[v]
+    if isIn:   
+      r += self.insideR[v]
+      c += self.insideC[v]
+    else:
+      """True if the square clockwise from v at [r, c] exists and
+      is in the class cls; false otherwise. Marks square if true."""
+      r += self.outsideR[v]
+      c += self.outsideC[v]
+
     if not self.isBoxCoord(r, c): 
       return False
     # [r, c] coordinates valid
     i, j = self.box2pixel(r, c)  # get corresponding raster coordinates
     if self.raster[i][j] == cls:
-       self.box[r][c] = 1
-       return True
+      self.box[r][c] = 1
+      return True
     return False
 
-  # code duplication ahead! I guess a map would be nice.
-     
-  def isOutside(self, r, c, v, cls):
-    """True if the square clockwise from v at [r, c] exists and
-       is in the class cls; false otherwise. Marks square if true."""
-    r += self.outsideR[v]
-    c += self.outsideC[v]
-    if not self.isBoxCoord(r, c): 
-      return False
-    # [r, c] coordinates valid
-    i, j = self.box2pixel(r, c)  # get corresponding raster coordinates
-    if self.raster[i][j] == cls:
-       self.box[r][c] = 1
-       return True
-    return False
 
      
   def traverse(self): 
@@ -368,7 +368,6 @@ class Dissolver(object):
     r = self.r-1
     c = self.c-1
     v = vx.r   # go right by default
-    v0 = 0   # the previous direction is undefined
     r0, c0 = r, c  # remember the initial vertex [r0, c0]
 
     # write the starting vertex
@@ -377,12 +376,12 @@ class Dissolver(object):
 
     r, c = self.move(r, c, v)  # move in direction v
     v0 = v                     # save the previous direction
-    # now you need to define the next direction
-    if not self.isInside(r, c, v, cls):
-      v = self.cw[v]                # cw from [r, c]
+    # define the next direction
+    if not self.isInOut(True, r, c, v, cls):
+      v = self.cw[v]                # Inside is cw from [r, c]
     else:
-      if self.isOutside(r, c, v, cls):
-        v = self.ccw[v]             # ccw from [r, c]
+      if self.isInOut(False, r, c, v, cls):
+        v = self.ccw[v]             # Outside is ccw from [r, c]
 
     if v != v0: # if you changed direction, output vertex
       if self.args.verbosity >= 6:
@@ -391,15 +390,14 @@ class Dissolver(object):
     while r != r0 or c != c0:
       r, c = self.move(r, c, v)  # move in direction v
       v0 = v                     # save the previous direction
-      # now you need to define the next direction
-      if not self.isInside(r, c, v, cls):
+      # define the next direction
+      if not self.isInOut(True, r, c, v, cls):
         v = self.cw[v]                # cw from [r, c]
       else:
-        if self.isOutside(r, c, v, cls):
+        if self.isInOut(False, r, c, v, cls):
           v = self.ccw[v]             # ccw from [r, c]
       if v != v0:
-        if ((self.args.verbosity >= 5 and r == 470 and c == 1498) 
-	    or self.args.verbosity >= 6):
+        if self.args.verbosity >= 6:
           print 'Writing state ([{0}, {1}], {2}, {3})'.format(r,c,self.diag[v], cls)
 
 
@@ -485,10 +483,9 @@ else:
   if args.verbosity >= 5:
     print grid
   while dis.nextValid(): # find the next valid box in raster/box coordinates
-    if args.verbosity >= 3:
+    if args.verbosity >= 4:
       i, j = dis.box2pixel(dis.r, dis.c)
-      print dis.r, dis.c, i, j, grid[i][j]
-
+      print 'Pixel ({0},{1}), box [{2},{3}] raster value {4}'.format(i, j, dis.r, dis.c, grid[i][j])
     dis.traverse() # traverse boundary
     if args.verbosity >= 5:
       print dis.box
