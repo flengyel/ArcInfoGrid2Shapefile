@@ -28,6 +28,11 @@ parser.add_argument('-a', '--attr',
                     metavar='attribute',
 		    default='value',
 		    help='Name of attribute for ArcInfo grid values. Defaults to "value."')
+parser.add_argument('-c', '--coords',
+		    nargs=2,
+		    type=int,
+		    metavar=('row', 'col'),
+		    help='Debugging input. Raster coordinates of starting pixel.')
 parser.add_argument('-d', '--dissolve',
 		    action='store_true',
 		    help='Dissolve Arc Info ASCII Grid in (row, col) space before converting to shapefile.')
@@ -48,9 +53,9 @@ parser.add_argument('-n', '--nonzero',
 parser.add_argument('-q', '--quiet', 
 		    action="store_true",
 		    help='Suppress progress bar.')
-parser.add_argument('-v', '--verbose', 
-		    action="store_true",
-		    help='Display verbose output.')
+parser.add_argument('-v', '--verbosity', 
+		    action="count", default=0,
+		    help="Display verbose message output. Each additional 'v' increases message verbosity: -vv is very verbose, and -vvv is very very verbose.")
 parser.add_argument('--version', 
 		    action='version', 
 		    version='%(prog)s 0.3',
@@ -82,7 +87,7 @@ class ArcInfoGridASCII(object):
       value = typeconv(field[1])
     except:
       raise ValueError, "Integer conversion of {0} failed.".format(field[1])
-    if self.args.verbose:
+    if self.args.verbosity >= 1:
       print '{0}: {1}'.format(fieldname, field[1])
     return value
 
@@ -242,8 +247,12 @@ class Dissolver(object):
     self.boxRows  = 2*hdr.nrows + 1
     self.boxCols  = 2*hdr.ncols + 1
     self.box   = np.zeros(shape = (self.boxRows, self.boxCols), dtype = np.int8) 
-    self.i =  0  # CAUTION: the nextValid() function starts from (i,j+1)
-    self.j = -1  # and must be called to set the current valid pixel
+    if self.args.coords == None:
+      self.i =  0  # CAUTION: the nextValid() function starts from (i,j+1)
+      self.j = -1  # and must be called to set the current valid pixel
+    else:
+      self.i, self.j = self.args.coords
+      self.j -= 1  # back up since nextValid() starts from (i, j+1)
 
     # define maps to add to [r,c] vertex coordinates
     self.goR    = { vx.r   :  0,  vx.d :  2, vx.l   :  0,  vx.u : -2}
@@ -262,15 +271,17 @@ class Dissolver(object):
     self.outsideC = { vx.r : 1, vx.d : 1, vx.l :-1, vx.u :-1 }
 
     # used for diagnostics
-    self.diag = { 0: '?', vx.r : 'r', vx.d : 'd', vx.l : 'l', vx.u : 'u' }
+    self.diag = { vx.r : 'r', vx.d : 'd', vx.l : 'l', vx.u : 'u' }
 
-  def move(self, row, col, vector):
+  def move(self, r, c, v):
     """recompute box coordinates using the mov enum"""
-    return (row + self.goR[vector], col + self.goC[vector])
+    return (r + self.goR[v], c + self.goC[v])
 
   def isBoxCoord(self, r, c):
     """True iff [r,c] is a valid box coordinate"""
-    return 0 <= r and r <  self.boxRows and 0 <= c and c <  self.boxCols
+    return ((0 <= r) and (r <  self.boxRows) and 
+		  (0 <= c) and c <  (self.boxCols))
+
 
   def pixel2box(self, i, j):
     """Box coordinates [r, c] of pixel at raster coordinates (i, j)"""
@@ -284,25 +295,33 @@ class Dissolver(object):
     """True iff the pixel at (i, j) is not nodata and the box at [i, j] is unmarked."""
     r, c = self.pixel2box(i, j)
     #print i, j, self.raster[i][j]
-    return (self.raster[i][j] != self.hdr.nodata and self.box[r][c] == 0)
+    pixel = self.raster[i][j]
+    return ( pixel != self.hdr.nodata and 
+	     (not self.args.nonzero or pixel != 0) and self.box[r][c] == 0 )
 
   def nextValid(self):
     # box coordinates [r, c] of the next valid pixel
-    row = self.i  # exhaust the current row
+    i = self.i  # exhaust the current row
     # (i,j) was valid; start at (i, j+1) 
-    for col in range(self.j+1, hdr.ncols): # (i,j+1) to (i, ncols-1)
-      if self.isValid(row, col):
-	 self.i, self.j = row, col
-	 self.r, self.c = self.pixel2box(row, col)
+    for j in range(self.j+1, hdr.ncols): # (i,j+1) to (i, ncols-1)
+      if self.isValid(i, j):
+	 self.i, self.j = i, j
+	 self.r, self.c = self.pixel2box(i, j)
 	 return True
     # continue with remaining rows
-    for row in range(self.i+1, hdr.nrows):
-      for col in range(0, hdr.ncols):
-        if self.isValid(row, col):
-	 self.i, self.j = row, col
-	 self.r, self.c = self.pixel2box(row, col)
+    for i in range(self.i+1, hdr.nrows):
+      for j in range(0, hdr.ncols):
+        if self.isValid(i, j):
+	 self.i, self.j = i, j
+	 self.r, self.c = self.pixel2box(i, j)
 	 return True
     return False
+
+  def markBox(self, r, c):
+    """Mark the box at [r, c]. 
+       CAUTION: not marking the first box visited is an error!
+    """
+    self.box[r][c] = 1
 
   def isInside(self, r, c, v, cls):
     """True if the square clockwise from v at [r, c] exists and
@@ -342,6 +361,9 @@ class Dissolver(object):
     i, j = self.box2pixel(self.r, self.c)
     cls = self.raster[i][j]    # get the classification of the raster
 
+    # IMPORTANT: mark the box at [r, c]
+    self.markBox(self.r, self.c)
+
     # move to upper left vertex
     r = self.r-1
     c = self.c-1
@@ -350,7 +372,8 @@ class Dissolver(object):
     r0, c0 = r, c  # remember the initial vertex [r0, c0]
 
     # write the starting vertex
-    print 'Writing state ([{0}, {1}], {2})'.format(r,c,self.diag[v])
+    if self.args.verbosity >= 6:
+      print 'Writing state ([{0}, {1}], {2}, {3})'.format(r,c,self.diag[v],cls)
 
     r, c = self.move(r, c, v)  # move in direction v
     v0 = v                     # save the previous direction
@@ -362,7 +385,8 @@ class Dissolver(object):
         v = self.ccw[v]             # ccw from [r, c]
 
     if v != v0: # if you changed direction, output vertex
-      print 'Writing state ([{0}, {1}], {2})'.format(r,c,self.diag[v])
+      if self.args.verbosity >= 6:
+        print 'Writing state ([{0}, {1}], {2}, {3})'.format(r,c,self.diag[v], cls)
 
     while r != r0 or c != c0:
       r, c = self.move(r, c, v)  # move in direction v
@@ -374,19 +398,20 @@ class Dissolver(object):
         if self.isOutside(r, c, v, cls):
           v = self.ccw[v]             # ccw from [r, c]
       if v != v0:
-        print 'Writing state ([{0}, {1}], {2})'.format(r,c,self.diag[v])
-
+        if ((self.args.verbosity >= 5 and r == 470 and c == 1498) 
+	    or self.args.verbosity >= 6):
+          print 'Writing state ([{0}, {1}], {2}, {3})'.format(r,c,self.diag[v], cls)
 
 
 args = parser.parse_args()  # parse command line arguments
 
-if args.verbose:
+if args.verbosity >= 1:
   print "Reading header..."
 
 hdr = ArcInfoGridASCII(args)
 ext = ExtentHandler(hdr, args)
 
-if args.verbose:
+if args.verbosity >= 1:
   print "Reading array..."
 
 grid1D = np.fromfile(hdr.file, sep = " \n")
@@ -399,7 +424,7 @@ if hdr.ncols * hdr.nrows != items:
 		                  hdr.nrows, hdr.ncols)
 
 # reshape the array
-if args.verbose:
+if args.verbosity >= 1:
   print "Reshaping array to grid..."
 grid = np.reshape( grid1D, (hdr.nrows, hdr.ncols) )
 
@@ -431,7 +456,7 @@ fieldef = ogr.FieldDefn( args.attr , ogr.OFTReal )
 if layer.CreateField ( fieldef ) != 0:
   raise ValueError, "OGR field definition failed."
 
-if args.verbose:
+if args.verbosity >= 1:
   print 'Converting to shapefile...'
 
 if not args.quiet: # show the progress bar unless instructed otherwise
@@ -457,14 +482,16 @@ if not args.dissolve:
       pbar.update(row+1)
 else:
   dis = Dissolver(args, hdr, ext, grid) 
-  print grid
+  if args.verbosity >= 5:
+    print grid
   while dis.nextValid(): # find the next valid box in raster/box coordinates
-    # (dis.r, dis.c) defined
-    i, j = dis.box2pixel(dis.r, dis.c)
-    print dis.r, dis.c, i, j, grid[i][j]
+    if args.verbosity >= 3:
+      i, j = dis.box2pixel(dis.r, dis.c)
+      print dis.r, dis.c, i, j, grid[i][j]
 
     dis.traverse() # traverse boundary
-    print dis.box
+    if args.verbosity >= 5:
+      print dis.box
 
 if not args.quiet:
   pbar.finish()
