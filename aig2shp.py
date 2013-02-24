@@ -205,15 +205,12 @@ class ExtentHandler(object):
 def enum(**enums):
   return type('Enum', (), enums)
 
-# adds globals -- 
+# vertex directions
 vx = enum(z=0, r=1, d=2, l=3, u=4)
 
+
 class Dissolver(object):
-  """Dissolve polygons in raster space. Uses box coordinate representation
-     of abstract squares, vertex directions and oriented edges. Oriented
-     edges cancel, and vertex directions compose to define the endpoints
-     of polygons along the path defined by the vertex directions. (The 
-     oriented edges are probably unnecessary!)
+  """Dissolve polygons in raster space. Uses box coordinate representation.
 
      The box coordinates of the pixel at (i, j) meaning row i, column j,
      are denoted [r, c] and are related by r,c = 2*i+1, 2*j+1. The
@@ -225,34 +222,8 @@ class Dissolver(object):
       UL→   Top   UR↓       [r-1,c-1]  [r-1,c] [r-1,c+1]
       Left  [r,c] Right     [r,c-1]    [r,c]   [r,c+1]
       LL↑   Bot   LR←       [r+1,c-1]  [r+1,c] [r+1,c+1]
-  
-      Vertex coordinates are even in box coordinate space. The 
-      five vertex algebra elements {0, ↓,  →,  ←,  ↑} are assigned 
-      according to vertex algebra composition table below.
-      Note that initially, all vertices are zero.
 
-       +  |  0  ↓  →  ←  ↑ 
-       -----------------------
-       0  |  0  ↓  →  ←  ↑
-       ↓  |  ↓  0  →  ↓  0
-       →  |  →  →  0  0  ↑ 
-       ←  |  ←  ↓  0  0  ← 
-       ↑  |  ↑  0  ↑  ←  0
-
-
-       Note what happens when two adjacent boxes with
-       adjacent edges are combined: edges cancel, and vertex
-       directions compose:
-
-       →  1  ↓  +   →  1  ↓     →  1  →  1  ↓
-      -1     1  +  -1     1 =  -1           1 
-       ↑ -1  ←  +   ↑ -1  ←     ↑ -1  ← -1  ←     
-
-       Edge addition is ordinary addition; vertex addition is defined
-       above.  There is a flaw, however: vertex addition isn't associative. 
-       The compromise is to say that a vertex direction is valid if it
-       is incident to two nonzero edges. Sometimes the operations will leave
-       some isolated verted directions. These won't count for traversal.
+      Note: Left, Top, Right and Bot aren't used. A little wasteful.
   """
 
   def __init__(self, args, hdr, ext, raster):
@@ -270,41 +241,36 @@ class Dissolver(object):
     # Square brackets denote box coordinates, parentheses denote pixel coordinates.
     self.boxRows  = 2*hdr.nrows + 1
     self.boxCols  = 2*hdr.ncols + 1
-    self.box   = np.zeros(shape=(self.boxRows, self.boxCols), dtype=np.int8) 
-    self.i = self.j = 0
+    self.box   = np.zeros(shape = (self.boxRows, self.boxCols), dtype = np.int8) 
+    self.i =  0  # CAUTION: the nextValid() function starts from (i,j+1)
+    self.j = -1  # and must be called to set the current valid pixel
 
-    # Vertex directions govern where to move. 0 is a special case
-    # that must be checked for first
-    self.rowMap = { vx.r : 0, vx.d : 1, vx.l : 0, vx.u : -1 }
-    self.colMap = { vx.r : 1, vx.d : 0, vx.l : -1, vx.u : 0 }
+    # define maps to add to [r,c] vertex coordinates
+    self.goR    = { vx.r   :  0,  vx.d :  2, vx.l   :  0,  vx.u : -2}
+    self.goC    = { vx.r   :  2,  vx.d :  0, vx.l   : -2,  vx.u :  0}
+
+    # clockwise and counter-clockwise direction changes
+    self.cw     = { vx.r : vx.d, vx.d : vx.l, vx.l : vx.u, vx.u : vx.r }
+    self.ccw    = { vx.r : vx.u, vx.u : vx.l, vx.l : vx.d, vx.d : vx.r }
+
+    # relative coordinates of inside and outside squares, 
+    # given a vertex [r, c] and a direction vector vx.
+    self.insideR = { vx.r : 1, vx.d : 1, vx.l :-1, vx.u :-1 }
+    self.insideC = { vx.r : 1, vx.d :-1, vx.l :-1, vx.u : 1 }
+
+    self.outsideR = { vx.r :-1, vx.d : 1, vx.l : 1, vx.u :-1 }
+    self.outsideC = { vx.r : 1, vx.d : 1, vx.l :-1, vx.u :-1 }
 
     # used for diagnostics
-    self.dirMap = { 0: '?', vx.r : 'r', vx.d : 'd', vx.l : 'l', vx.u : 'u' }
+    self.diag = { 0: '?', vx.r : 'r', vx.d : 'd', vx.l : 'l', vx.u : 'u' }
 
-    # define the vertex composition via maps
+  def move(self, row, col, vector):
+    """recompute box coordinates using the mov enum"""
+    return (row + self.goR[vector], col + self.goC[vector])
 
-    """
-     +  |  0  d  r  l  u 
-     -----------------------
-     0  |  0  d  r  l  u
-     d  |  d  0  r  d  0
-     r  |  r  r  0  0  u 
-     l  |  l  d  0  0  l 
-     u  |  u  0  u  l  0
-
-    """
-    self.map0  = { 0 : 0,    vx.d : vx.d, vx.r : vx.r, vx.l : vx.l, vx.u : vx.u }
-    self.mapd  = { 0 : vx.d, vx.d : 0,    vx.r : vx.r, vx.l : vx.d, vx.u : 0 }
-    self.mapr  = { 0 : vx.r, vx.d : vx.r, vx.r : 0,    vx.l : 0, vx.u : vx.u }
-    self.mapl  = { 0 : vx.l, vx.d : vx.d, vx.r : 0,    vx.l : 0, vx.u : vx.l }
-    self.mapu  = { 0 : vx.u, vx.d : 0,    vx.r : vx.u, vx.l : vx.l, vx.u : 0 }
-    self.opmap = { 0 : self.map0, vx.d : self.mapd, vx.r : self.mapr, 
-		                  vx.l : self.mapl, vx.u : self.mapu } 
-
-  def op(self, v, w):
-    """Compute vertex algebra composition.""" 
-    return self.opmap[v][w]
-
+  def isBoxCoord(self, r, c):
+    """True iff [r,c] is a valid box coordinate"""
+    return 0 <= r and r <  self.boxRows and 0 <= c and c <  self.boxCols
 
   def pixel2box(self, i, j):
     """Box coordinates [r, c] of pixel at raster coordinates (i, j)"""
@@ -321,9 +287,10 @@ class Dissolver(object):
     return (self.raster[i][j] != self.hdr.nodata and self.box[r][c] == 0)
 
   def nextValid(self):
-    # 1et cubical coordinates [r, c] of the next valid pixel
+    # box coordinates [r, c] of the next valid pixel
     row = self.i  # exhaust the current row
-    for col in range(self.j, hdr.ncols):
+    # (i,j) was valid; start at (i, j+1) 
+    for col in range(self.j+1, hdr.ncols): # (i,j+1) to (i, ncols-1)
       if self.isValid(row, col):
 	 self.i, self.j = row, col
 	 self.r, self.c = self.pixel2box(row, col)
@@ -337,147 +304,79 @@ class Dissolver(object):
 	 return True
     return False
 
-  def markTop(self, r, c):
-    # Top edge of box at [r,c] is [r-1, c] 
-    self.box[r-1][c] += 1
+  def isInside(self, r, c, v, cls):
+    """True if the square clockwise from v at [r, c] exists and
+       is in the class cls; false otherwise. Marks square if true."""
+    r += self.insideR[v]
+    c += self.insideC[v]
+    if not self.isBoxCoord(r, c): 
+      return False
+    # [r, c] coordinates valid
+    i, j = self.box2pixel(r, c)  # get corresponding raster coordinates
+    if self.raster[i][j] == cls:
+       self.box[r][c] = 1
+       return True
+    return False
 
-  def markRight(self, r, c):
-    # Right edge of box at [r,c] is [r,c+1] 
-    self.box[r][c+1] += 1
+  # code duplication ahead! I guess a map would be nice.
+     
+  def isOutside(self, r, c, v, cls):
+    """True if the square clockwise from v at [r, c] exists and
+       is in the class cls; false otherwise. Marks square if true."""
+    r += self.outsideR[v]
+    c += self.outsideC[v]
+    if not self.isBoxCoord(r, c): 
+      return False
+    # [r, c] coordinates valid
+    i, j = self.box2pixel(r, c)  # get corresponding raster coordinates
+    if self.raster[i][j] == cls:
+       self.box[r][c] = 1
+       return True
+    return False
 
-  def markBot(self, r, c):
-    self.box[r+1][c] -= 1
-
-  def markLeft(self, r, c):
-    self.box[r][c-1] -= 1
-
-  def markBox(self, r, c):
-    """Mark the square corresponding to pixel at (i,j)"""
-    self.box[r][c] = 1          # mark the box visited
-    self.markTop(r, c)          # apply the edge algebra
-    self.markRight(r, c)
-    self.markBot(r, c)
-    self.markLeft(r, c)
-    # also, apply the vertex algebra
-    self.box[r-1][c-1] = self.op(self.box[r-1][c-1], vx.r)
-    self.box[r-1][c+1] = self.op(self.box[r-1][c+1], vx.d)
-    self.box[r+1][c+1] = self.op(self.box[r+1][c+1], vx.l)
-    self.box[r+1][c-1] = self.op(self.box[r+1][c-1], vx.u)
-
-  def upOK(self, r, c):
-    return r-2 >= 0
-
-  def downOK(self, r, c):
-    return r+2 < self.boxRows
-
-  def leftOK(self, r, c):
-    return c-2 >= 0
-
-  def rightOK(self, r, c):
-    return c+2 < self.boxCols
-
-  # note: you may wish to generalize the test by passing a boolean-valued
-  # function v and checking if v(p) holds.
-  # Recusion easily exceeds sys.getstacklimit() for actual files
-  # use a local checking method.
-  def defBoundary(self, r, c, v):
-    """Define the boundary at the box"""
-
-    def adjacent(r, c, v):
-      if self.box[r][c] == 0:  # Edge case: do not proceed if box is marked
-        i,j = self.box2pixel(r, c)
-	p = self.raster[i][j]
-        if p != self.hdr.nodata and p == v: # check for novalue redundant
-          self.defBoundary(r, c, v) 
-
-    self.markBox(r, c)  # mark the box
-
-    if self.upOK(r, c):
-      adjacent(r-2, c, v)
-    if self.downOK(r, c):
-      adjacent(r+2, c, v)
-    if self.leftOK(r, c):
-      adjacent(r, c-2, v)
-    if self.rightOK(r, c):
-      adjacent(r, c+2, v)
      
   def traverse(self): 
-    """Traverse and build a polygon."""	  
+    """Traverse and build a polygon.
+       The state is ([r, c], v, v0): the current vertex and the current direction
+    """	  
+    i, j = self.box2pixel(self.r, self.c)
+    cls = self.raster[i][j]    # get the classification of the raster
 
     # move to upper left vertex
-    r = self.r - 1
-    c = self.c - 1
+    r = self.r-1
+    c = self.c-1
+    v = vx.r   # go right by default
+    v0 = 0   # the previous direction is undefined
+    r0, c0 = r, c  # remember the initial vertex [r0, c0]
 
-    print 'Writing vertex [{0}, {1}]'.format(r,c)
+    # write the starting vertex
+    print 'Writing state ([{0}, {1}], {2})'.format(r,c,self.diag[v])
 
-    r0, c0 = r, c          # remember the initial vertex [r0, c0]
-    vrtx = self.box[r][c]  # get the direction
-    self.box[r][c] = 0     # reset the vertex in box
+    r, c = self.move(r, c, v)  # move in direction v
+    v0 = v                     # save the previous direction
+    # now you need to define the next direction
+    if not self.isInside(r, c, v, cls):
+      v = self.cw[v]                # cw from [r, c]
+    else:
+      if self.isOutside(r, c, v, cls):
+        v = self.ccw[v]             # ccw from [r, c]
 
-    if vrtx == 0:     # uh oh: hunt for direction 
-      # from perspective of vertex, is edge oriented the same way?
-      # if so, choose this direction.
-      for d in (vx.r, vx.d, vx.l, vx.u):
-        edge = self.box[r+self.rowMap[d]][c+self.colMap[d]]
-	if edge == self.rowMap[d] + self.colMap[d]:
-          vrtx = d
-	  break
-      if vrtx == 0:
-	raise ValueError, 'Logic error: nowhere to go from [{0},{1}]'.format(r,c)
-
-    # now you have a valid direction -- move to edge
-    r = r + self.rowMap[vrtx]
-    c = c + self.colMap[vrtx]   
-
-    print 'Direction {0} at edge [{1},{2}]'.format(self.dirMap[vrtx], r, c)
-
-    # reset the edge
-    self.box[r][c] = 0      
-
-    # move to the next vertex
-    r = r + self.rowMap[vrtx]
-    c = c + self.colMap[vrtx]   
-    vrtx0 = vrtx   # save the previous direction -- it's valid.
+    if v != v0: # if you changed direction, output vertex
+      print 'Writing state ([{0}, {1}], {2})'.format(r,c,self.diag[v])
 
     while r != r0 or c != c0:
-      vrtx  = self.box[r][c]  # get the new direction
-      self.box[r][c] = 0  # reset the vertex in box
-      # need to check if vrtx is valid
-      # if not, make it valid
-      # then check whether it is the same direction as vrtx0
-      # if not, write out the new vertex
-      # in any case, update the 
+      r, c = self.move(r, c, v)  # move in direction v
+      v0 = v                     # save the previous direction
+      # now you need to define the next direction
+      if not self.isInside(r, c, v, cls):
+        v = self.cw[v]                # cw from [r, c]
+      else:
+        if self.isOutside(r, c, v, cls):
+          v = self.ccw[v]             # ccw from [r, c]
+      if v != v0:
+        print 'Writing state ([{0}, {1}], {2})'.format(r,c,self.diag[v])
 
-      if vrtx == 0:     # uh oh: hunt for direction 
-        # from perspective of vertex, is edge oriented the same way?
-        # if so, choose this direction.
-        for d in (vx.r, vx.d, vx.l, vx.u):
-          edge = self.box[r+self.rowMap[d]][c+self.colMap[d]]
-	  if edge == self.rowMap[d] + self.colMap[d]:
-            vrtx = d
-	    break
-        if vrtx == 0:
-	  raise ValueError, 'Logic error: nowhere to go from [{0},{1}]'.format(r,c)
 
-      # now vrtex is valid. Check if the vertex should be written out.
-      if vrtx != vrtx0:
-	# turning point
-        print 'Writing vertex [{0}, {1}]'.format(r,c)
-      # now you have a valid direction -- move to edge
-      r = r + self.rowMap[vrtx]
-      c = c + self.colMap[vrtx]   
-
-      print 'Direction {0} at edge [{1},{2}]'.format(self.dirMap[vrtx], r, c)
-
-      # reset the edge
-      self.box[r][c] = 0      
-
-      # move to the next vertex
-      r = r + self.rowMap[vrtx]
-      c = c + self.colMap[vrtx]   
-      vrtx0 = vrtx   # save the previous direction -- it's valid.
-
-# end of traverse  -- now for fireworks!!
 
 args = parser.parse_args()  # parse command line arguments
 
@@ -557,17 +456,12 @@ if not args.dissolve:
     if not args.quiet:
       pbar.update(row+1)
 else:
-  print 'Dissolve not implemented!'
   dis = Dissolver(args, hdr, ext, grid) 
   print grid
   while dis.nextValid(): # find the next valid box in raster/box coordinates
     # (dis.r, dis.c) defined
     i, j = dis.box2pixel(dis.r, dis.c)
     print dis.r, dis.c, i, j, grid[i][j]
-
-    # compute the boundary
-    dis.defBoundary(dis.r, dis.c, grid[i][j])
-    print dis.box
 
     dis.traverse() # traverse boundary
     print dis.box
