@@ -92,11 +92,13 @@ class ArcInfoGridASCII(object):
     return value
 
   def __init__(self, args):
-    self.args = args
+    if args.verbosity >= 1:
+      print "Reading header..."
     try:
       self.file = open(args.infile, "r")
     except IOError as e:
       raise IOError, "I/O error({0}): {1}".format(e.errno, e.strerror)
+    self.args   = args  # may not need to save this!
     self.ncols  = self.getField("ncols", int)
     self.nrows  = self.getField("nrows", int)
     self.xll    = self.getField("xllcorner", float)
@@ -241,7 +243,11 @@ class Dissolver(object):
     self.args = args
     self.hdr  = hdr
     self.ext  = ext
-    self.raster = raster
+    self.raster = raster  # this is a raster object
+
+    # This is the polygon region number. 
+    self.region = 0  # The box at [r,c] is marked by the region number    
+
     # Create the box coordinate space (i, j) -> [2*i+1, 2*j+1]
     # Square brackets denote box coordinates, parentheses denote pixel coordinates.
     self.boxRows  = 2*hdr.nrows + 1
@@ -299,47 +305,57 @@ class Dissolver(object):
     """Return pixel coordinates (i,j) of box at box coordinates [r,c]"""
     return ((r-1)>>1, (c-1)>>1)
   
-  def isValid(self, i, j):
-    """True iff the pixel at (i, j) is not nodata and the box at [i, j] is unmarked."""
-    r, c = self.pixel2box(i, j)
-    #print i, j, self.raster[i][j]
-    pixel = self.raster[i][j]
-    return ( pixel != self.hdr.nodata and 
-	     (not self.args.nonzero or pixel != 0) and self.box[r][c] == 0 )
-
   def nextValid(self):
+    """Find the next potential starting point [r,c] for an outer loop or an inner 
+       annulus ring. Note that some squares may be "deep inside" another 
+       region, but cannot be the starting point of any ring. The traverse() 
+       algorithm should recognize these and mark them with the appropriate
+       region number--though it could skip over them without marking."""
+
+    def isValid(self, i, j): # this local function isn't used elsewhere
+      """True iff the pixel at (i, j) is not nodata and the box at [r, c] has
+      no region number assigned. Note the side effect--hence this is local."""
+      self.r, self.c = self.pixel2box(i, j)
+      #print i, j, self.raster[i][j]
+      pixel = self.raster.grid[i][j]
+      return ( pixel != self.hdr.nodata and 
+               (not self.args.nonzero or pixel != 0) and 
+	       self.box[self.r][self.c] == 0 )
+
     # box coordinates [r, c] of the next valid pixel
     i = self.i  # exhaust the current row
     # (i,j) was valid; start at (i, j+1) 
     for j in range(self.j+1, hdr.ncols): # (i,j+1) to (i, ncols-1)
-      if self.isValid(i, j):
+      if isValid(self, i, j): # note that isValid is local and needs self
 	 self.i, self.j = i, j
-	 self.r, self.c = self.pixel2box(i, j)
 	 return True
     # continue with remaining rows
     for i in range(self.i+1, hdr.nrows):
       for j in range(0, hdr.ncols):
-        if self.isValid(i, j):
+        if isValid(self, i, j):
 	 self.i, self.j = i, j
-	 self.r, self.c = self.pixel2box(i, j)
 	 return True
     return False
 
-  def markBox(self, r, c):
-    """Mark the box at [r, c]. 
+  def markBox(self, r, c, v, region):
+    """Mark the inside  box at vertex [r, c] in direction v. If annulus
+       is true, you should not mark any boxes.
        CAUTION: not marking the first box visited is an error!
     """
-    self.box[r][c] = 1
+    r += self.insideR[v]
+    c += self.insideC[v]
+    if self.args >= 4:
+      region0 = self.box[r][c]	    
+      print '[{0},{1}] in region {2} marking with {3}'.format(r, c, region0, region)
+    self.box[r][c] = region
 
   def isInOut(self, isIn, r, c, v, cls):
-    """True if the square clockwise from v at [r, c] exists and
-       is in the class cls; false otherwise. Marks square if true."""
+    """Returns True if the square clockwise (ccw if isIn is False) 
+       from v at [r, c] exists and is in the class cls; false otherwise."""
     if isIn:   
       r += self.insideR[v]
       c += self.insideC[v]
     else:
-      """True if the square clockwise from v at [r, c] exists and
-      is in the class cls; false otherwise. Marks square if true."""
       r += self.outsideR[v]
       c += self.outsideC[v]
 
@@ -347,84 +363,143 @@ class Dissolver(object):
       return False
     # [r, c] coordinates valid
     i, j = self.box2pixel(r, c)  # get corresponding raster coordinates
-    if self.raster[i][j] == cls:
-      self.box[r][c] = 1
+    if self.raster.grid[i][j] == cls:
       return True
     return False
 
 
+  def getRegion(self, r, c, v):
+   """If v == vx.r, get region of box "above" (outside) vertex [r,c] looking right
+      If v == vx.l, get region of box "left" (outside) vertex [r,c] looking left.
+      The perspective is that [r,c] is the upper left corner of box at [r+1,c+1]
+   """
+   if self.args.verbosity >= 5:
+     r0 = r+self.outsideR[v]
+     c0 = c+self.outsideC[v]
+     print 'getRegion: box outside [{0},{1}] in direction {2} is [{3},{4}]'.format(
+		     r, c, self.diag[v], r0, c0)
+   return self.box[r+self.outsideR[v]][c+self.outsideC[v]]
+
      
   def traverse(self): 
-    """Traverse and build a polygon.
-       The state is ([r, c], v, v0): the current vertex and the current direction
+    """Traverse and build polygons with rings.
+       The state is ([r, c], v, v0, annulus): the current vertex and the current direction
     """	  
     i, j = self.box2pixel(self.r, self.c)
-    cls = self.raster[i][j]    # get the classification of the raster
+    cls = self.raster.grid[i][j]    # get the classification of the raster
 
-    # IMPORTANT: mark the box at [r, c]
-    self.markBox(self.r, self.c)
-
+    # The first step is to find the region number of the box at [self.r, self.c]
     # move to upper left vertex
     r = self.r-1
     c = self.c-1
-    v = vx.r   # go right by default
+    v = vx.r   # Look outside right (east) of [r, c]
+
+    if self.args.verbosity >= 5:
+      print 'In traverse box [{0},{1}], vertex [{2},{3}] vector {4}.'.format(
+	self.r, self.c, r, c, v)
+
+    if self.isInOut(False, r, c, v, cls):
+      # now it gets interesting. This box is in the same region as the box above.
+      # find the region and set it
+      region = self.getRegion(r, c, v)
+      print 'Box above vertex [{0},{1}] is in the same region {2}.'.format(r, c, region)
+      if region == 0:
+        print 'ERROR ERROR: zero region zero region zero region'
+	exit(-1)
+      if self.isInOut(False, r, c, vx.l, cls): # look "outside" left (west) of [r, c]
+	# [r, c] is an interior box. Mark with region and exit.
+	print 'marking the box, and exiting'
+	self.markBox(r, c, vx.r, region)
+	return
+      else:
+	print 'Go counter clockwise -- this is an annulus.'
+	print 'Do not mark boxes.'
+	v = vx.l
+	annulus = True
+    else:
+      # this is a new polygonal region. The orientation is clockwise
+      self.region += 1 
+      region = self.region
+      annulus = False
+
+    # the direction and the region are known
     r0, c0 = r, c  # remember the initial vertex [r0, c0]
 
-    # write the starting vertex
-    if self.args.verbosity >= 6:
-      print 'Writing state ([{0}, {1}], {2}, {3})'.format(r,c,self.diag[v],cls)
 
+    if self.args.verbosity >= 6:
+      print 'Writing state ([{0}, {1}], {2}, {3}, {4})'.format(r,c, self.diag[v], 
+		                                               cls, region)
     r, c = self.move(r, c, v)  # move in direction v
     v0 = v                     # save the previous direction
-    # define the next direction
+
     if not self.isInOut(True, r, c, v, cls):
-      v = self.cw[v]                # Inside is cw from [r, c]
+      v = self.cw[v]           # Inside is cw from [r, c] if not annulus
     else:
       if self.isInOut(False, r, c, v, cls):
-        v = self.ccw[v]             # Outside is ccw from [r, c]
+        v = self.ccw[v]        # Outside is ccw from [r, c] if not annulus
+
+    # mark the box after you move and have a direction
+    # the boxes will be marked when you return
+    #if not annulus:
+    self.markBox(r, c, v, region) 
 
     if v != v0: # if you changed direction, output vertex
       if self.args.verbosity >= 6:
-        print 'Writing state ([{0}, {1}], {2}, {3})'.format(r,c,self.diag[v], cls)
+        print 'Writing state ([{0}, {1}], {2}, {3}, {4})'.format(r, c, self.diag[v], 
+			                                         cls, region)
 
     while r != r0 or c != c0:
       r, c = self.move(r, c, v)  # move in direction v
       v0 = v                     # save the previous direction
       # define the next direction
       if not self.isInOut(True, r, c, v, cls):
-        v = self.cw[v]                # cw from [r, c]
+        v = self.cw[v]                # cw from [r, c] if not annulus
       else:
         if self.isInOut(False, r, c, v, cls):
-          v = self.ccw[v]             # ccw from [r, c]
+          v = self.ccw[v]             # ccw from [r, c] if not annulus
+
+      # you moved and have a direction -- mark the inside box
+      # the same box will be marked for each move...oh well
+      #if not annulus:
+      self.markBox(r, c, v, region)
+
       if v != v0:
         if self.args.verbosity >= 6:
-          print 'Writing state ([{0}, {1}], {2}, {3})'.format(r,c,self.diag[v], cls)
+          print 'Writing state ([{0}, {1}], {2}, {3}, {4})'.format(r,c,self.diag[v], 
+			                                      cls, region)
+
+
+class Raster(object):
+  """Raster objects hold the grid of pixes, which can be passed to Dissolve objects
+     without copying the entire numpy array"""
+  def __init__(self, args, hdr):
+    	  
+    if args.verbosity >= 1:
+      print "Reading array..."
+
+    grid1D = np.fromfile(hdr.file, sep = " \n")
+
+    # verify that the array can be reshaped
+    items = grid1D.shape[0]
+    if hdr.ncols * hdr.nrows != items:
+      errorStr = "Number of items read in is {0} instead of {1}={2}*{3}"
+      raise IOError, errorStr.format(items, hdr.nrows*hdr.ncols,
+		                  hdr.nrows, hdr.ncols)
+
+    # reshape the array
+    if args.verbosity >= 1:
+      print "Reshaping array to grid..."
+    self.grid = np.reshape( grid1D, (hdr.nrows, hdr.ncols) )
+
 
 
 args = parser.parse_args()  # parse command line arguments
 
-if args.verbosity >= 1:
-  print "Reading header..."
 
 hdr = ArcInfoGridASCII(args)
 ext = ExtentHandler(hdr, args)
+raster = Raster(args, hdr)
 
-if args.verbosity >= 1:
-  print "Reading array..."
-
-grid1D = np.fromfile(hdr.file, sep = " \n")
-
-# verify that the array can be reshaped
-items = grid1D.shape[0]
-if hdr.ncols * hdr.nrows != items:
-  errorStr = "Number of items read in is {0} instead of {1}={2}*{3}"
-  raise IOError, errorStr.format(items, hdr.nrows*hdr.ncols,
-		                  hdr.nrows, hdr.ncols)
-
-# reshape the array
-if args.verbosity >= 1:
-  print "Reshaping array to grid..."
-grid = np.reshape( grid1D, (hdr.nrows, hdr.ncols) )
 
 # create the shapefile
 driverName = "ESRI Shapefile"
@@ -463,7 +538,7 @@ if not args.quiet: # show the progress bar unless instructed otherwise
 if not args.dissolve:
   for row  in range(0, hdr.nrows):
     for col in range(0, hdr.ncols):
-      v = grid[row][col]
+      v = raster.grid[row][col]
       if v != hdr.nodata and (not args.nonzero or v != 0):
         lon, lat = hdr.cart2geo(row, col) # Note reversal!
         if ext.compare(lat, lon):
@@ -479,13 +554,10 @@ if not args.dissolve:
     if not args.quiet:
       pbar.update(row+1)
 else:
-  dis = Dissolver(args, hdr, ext, grid) 
+  dis = Dissolver(args, hdr, ext, raster) 
   if args.verbosity >= 5:
-    print grid
+    print raster.grid
   while dis.nextValid(): # find the next valid box in raster/box coordinates
-    if args.verbosity >= 4:
-      i, j = dis.box2pixel(dis.r, dis.c)
-      print 'Pixel ({0},{1}), box [{2},{3}] raster value {4}'.format(i, j, dis.r, dis.c, grid[i][j])
     dis.traverse() # traverse boundary
     if args.verbosity >= 5:
       print dis.box
