@@ -413,7 +413,6 @@ class Dissolver(object):
 	return
       else:
 	print 'Go counter clockwise -- this is an annulus.'
-	print 'Do not mark boxes.'
 	v = vx.l
 	annulus = True
     else:
