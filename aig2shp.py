@@ -245,8 +245,6 @@ class Dissolver(object):
     self.ext  = ext
     self.raster = raster  # this is a raster object
 
-    # This is the polygon region number. 
-    self.region = 0  # The box at [r,c] is marked by the region number    
 
     # Create the box coordinate space (i, j) -> [2*i+1, 2*j+1]
     # Square brackets denote box coordinates, parentheses denote pixel coordinates.
@@ -277,7 +275,18 @@ class Dissolver(object):
     self.outsideC = { vx.r : 1, vx.d : 1, vx.l :-1, vx.u :-1 }
 
     # used for diagnostics
-    self.diag = { vx.r : 'r', vx.d : 'd', vx.l : 'l', vx.u : 'u' }
+    self.diag = { vx.z : 'z', vx.r : 'r', vx.d : 'd', vx.l : 'l', vx.u : 'u' }
+
+    # Simply connected region to class map
+    # The region outside the raster is 0 by definition. Its classification is
+    # np.nan (the numpy library not a number), which is never equal to anything.
+    # This is precisely the behavior one wants. The upper left hand corner is
+    # in region 1, by definition. All other region numbers are defined as
+    # the program runs.
+    self.region2class = { 0 : np.nan, 1 : 0 }
+
+    # Global locally simply connected region number
+    self.region = 1  # The box at [r,c] is marked by the region number    
 
   def move(self, r, c, v):
     """recompute box coordinates using the mov enum"""
@@ -307,20 +316,14 @@ class Dissolver(object):
   
   def nextValid(self):
     """Find the next potential starting point [r,c] for an outer loop or an inner 
-       annulus ring. Note that some squares may be "deep inside" another 
-       region, but cannot be the starting point of any ring. The traverse() 
-       algorithm should recognize these and mark them with the appropriate
-       region number--though it could skip over them without marking."""
+       annulus ring."""
 
     def isValid(self, i, j): # this local function isn't used elsewhere
-      """True iff the pixel at (i, j) is not nodata and the box at [r, c] has
-      no region number assigned. Note the side effect--hence this is local."""
+      """True iff the pixel at (i, j) (box at [r, c]) has not been
+      assigned a nonzero region number. Handling special data values goes
+      elsewhere."""
       self.r, self.c = self.pixel2box(i, j)
-      #print i, j, self.raster[i][j]
-      pixel = self.raster.grid[i][j]
-      return ( pixel != self.hdr.nodata and 
-               (not self.args.nonzero or pixel != 0) and 
-	       self.box[self.r][self.c] == 0 )
+      return self.box[self.r][self.c] == 0
 
     # box coordinates [r, c] of the next valid pixel
     i = self.i  # exhaust the current row
@@ -338,16 +341,14 @@ class Dissolver(object):
     return False
 
   def markBox(self, r, c, v, region):
-    """Mark the inside  box at vertex [r, c] in direction v. If annulus
-       is true, you should not mark any boxes.
-       CAUTION: not marking the first box visited is an error!
+    """Mark the inside  box at vertex [r, c] in direction v. 
     """
-    r += self.insideR[v]
-    c += self.insideC[v]
+    r0 = r + self.insideR[v]
+    c0 = c + self.insideC[v]
     if self.args >= 4:
-      region0 = self.box[r][c]	    
-      print '[{0},{1}] in region {2} marking with {3}'.format(r, c, region0, region)
-    self.box[r][c] = region
+      print 'Marking box [{0},{1}] at vertex [{2},{3}] in direction {4} region {5}'.format(
+		      r0, c0, r, c, self.diag[v],region )
+    self.box[r0][c0] = region
 
   def isInOut(self, isIn, r, c, v, cls):
     """Returns True if the square clockwise (ccw if isIn is False) 
@@ -368,66 +369,139 @@ class Dissolver(object):
     return False
 
 
-  def getRegion(self, r, c, v):
-   """If v == vx.r, get region of box "above" (outside) vertex [r,c] looking right
-      If v == vx.l, get region of box "left" (outside) vertex [r,c] looking left.
-      The perspective is that [r,c] is the upper left corner of box at [r+1,c+1]
-   """
-   if self.args.verbosity >= 5:
-     r0 = r+self.outsideR[v]
-     c0 = c+self.outsideC[v]
+  def getOutsideRegion(self, r, c, v):
+   """Get region of box outside vertex [r,c] in direction v"""
+
+   r0 = r+self.outsideR[v]
+   c0 = c+self.outsideC[v]
+   if not isBoxCoord(r0, c0):
+     return np.nan   # our convention for outside the raster (never equals anything!)
+   if self.args.verbosity >= 7:
      print 'getRegion: box outside [{0},{1}] in direction {2} is [{3},{4}]'.format(
 		     r, c, self.diag[v], r0, c0)
-   return self.box[r+self.outsideR[v]][c+self.outsideC[v]]
+   return self.box[r0][c0]
 
-     
+
+  # Simply Connected Region handling. The upper left-hand corner has region 1, 
+  # valid or not, by  definition. If it is a nodata region, this is either treated 
+  # like every other region, or no polygon is generated for it. Provisionally nodata 
+  # regions are treated the same way as all others. For now, nodata is treated by
+  # the algorithm as if it were a valid region.
+
+  def getCls(self, r, c):
+    """Get class of box at [r, c]"""
+    i, j = self.box2pixel(r, c)
+    return self.raster.grid[i][j]
+
+  def boxRegion(self):
+    """Determine the region of the new box. Inductive assumption:
+       The boxes left and above have assigned regions. The upper left has region 1.
+       The region2class[] map is defined for the boxes left and above.
+
+       This routine needs to check whether the traversal can proceed, and in
+       which direction.  Check the box above and to your left.    
+       
+       Left      Above    Box
+       (0,nan)   (0, nan) (1, vx.r)
+       (0,nan)   (R, cls) if Box.cls == cls then (R, vx,0) don't go anywhere!
+                          you'll cross an edge!
+			  if Box.cls != cls, then (new R, vx.r) 
+       (R, cls)  (0, nan) if Box.cls == cls, then error -- you should have been here
+       (R, x)    (R, x)   If Box.cls == x, then (R, vx.0) -- don't traverse
+       (R, x)    (S, y)   if Box.cls == x, then (R, vx.r) you can go right
+                          if Box.cls == y  then (S, vx.0) you cannot move
+			  if Box.cls is neither, (new R, vx.r)
+    """			  
+    # left square
+    rLeft = self.r
+    cLeft = self.c-2
+    
+    rTop  = self.r-2
+    cTop  = self.c
+
+    myCls = self.getCls(self.r, self.c)
+
+    if not self.isBoxCoord(rLeft, cLeft):
+      # left invalid, look above
+      if not self.isBoxCoord(rTop, cTop):
+        self.box[self.r][self.c] = 1  
+	self.region2class[1] = myCls
+        return (1, vx.r)    
+      else:
+	# Top is defined -- get cls
+	if self.getCls(rTop, cTop) == myCls:
+	  region = self.box[rTop][cTop]
+          self.box[self.r][self.c] = region
+	  # you cannot move right -- this would mean crossing an edge
+	  return (region, vx.z)
+        else:
+	  # my class is new at the left edge.
+	  self.region += 1
+	  self.region2class[self.region] = myCls  # add the new region
+          self.box[self.r][self.c] = self.region
+	  return (self.region, vx.r)
+
+    # Left is defined. Suppose the top is not defined. This is a sanity check
+
+    leftCls = self.getCls(rLeft, cLeft)
+    if not self.isBoxCoord(rTop, cTop):
+      if leftCls == myCls:
+	# This is an error. The traversal should have found this
+	raise ValueError, 'Box [{0},{1] has same class {2} as [{3},{4}]'.format(
+			                         self.r, self.c, myCls, rLeft, cLeft)
+      else:
+      # New class
+        self.region += 1
+	self.region2class[self.region] = myCls  # add the new region
+        self.box[self.r][self.c] = self.region
+	return (self.region, vx.r)
+
+    # finally, the top and left are defined 
+    leftRegion = self.box[rLeft][cLeft]
+    topRegion  = self.box[rTop][cTop]
+
+    if myCls == self.region2class[topRegion]:
+      self.box[self.r][self.c] = topRegion
+      # you cannot move right -- crossing deleted edge
+      return (topRegion, vx.z)
+
+    if myCls == self.region2class[leftRegion]:
+      self.box[self.r][self.c] = leftRegion
+      return (leftRegion, vx.r)
+
+    # new region
+    self.region += 1
+    self.region2class[self.region] = myCls  # add the new region
+    self.box[self.r][self.c] = self.region
+    return (self.region, vx.r)
+
+
+
   def traverse(self): 
     """Traverse and build polygons with rings.
        The state is ([r, c], v, v0, annulus): the current vertex and the current direction
     """	  
-    i, j = self.box2pixel(self.r, self.c)
-    cls = self.raster.grid[i][j]    # get the classification of the raster
 
-    # The first step is to find the region number of the box at [self.r, self.c]
-    # move to upper left vertex
+    # get the classification of the new box
+    (region, v) = self.boxRegion()  # All boxes visited will be marked with region 
+
     r = self.r-1
     c = self.c-1
-    v = vx.r   # Look outside right (east) of [r, c]
 
     if self.args.verbosity >= 5:
-      print 'In traverse box [{0},{1}], vertex [{2},{3}] vector {4}.'.format(
-	self.r, self.c, r, c, v)
+      cls =  self.getCls(self.r, self.c)
+      print 'Traverse box [{0},{1}], vertex [{2},{3}] vector {4} region {5} class {6}.'.format(
+	self.r, self.c, r, c, self.diag[v], region, cls)
 
-    if self.isInOut(False, r, c, v, cls):
-      # now it gets interesting. This box is in the same region as the box above.
-      # find the region and set it
-      region = self.getRegion(r, c, v)
-      print 'Box above vertex [{0},{1}] is in the same region {2}.'.format(r, c, region)
-      if region == 0:
-        print 'ERROR ERROR: zero region zero region zero region'
-	exit(-1)
-      if self.isInOut(False, r, c, vx.l, cls): # look "outside" left (west) of [r, c]
-	# [r, c] is an interior box. Mark with region and exit.
-	print 'marking the box, and exiting'
-	self.markBox(r, c, vx.r, region)
-	return
-      else:
-	print 'Go counter clockwise -- this is an annulus.'
-	v = vx.l
-	annulus = True
-    else:
-      # this is a new polygonal region. The orientation is clockwise
-      self.region += 1 
-      region = self.region
-      annulus = False
+    if v == vx.z:  # can't proceed
+      if self.args.verbosity >=6:
+	print 'Traverse box: exiting, cannot go right'
+      return
 
     # the direction and the region are known
     r0, c0 = r, c  # remember the initial vertex [r0, c0]
 
 
-    if self.args.verbosity >= 6:
-      print 'Writing state ([{0}, {1}], {2}, {3}, {4})'.format(r,c, self.diag[v], 
-		                                               cls, region)
     r, c = self.move(r, c, v)  # move in direction v
     v0 = v                     # save the previous direction
 
@@ -436,37 +510,35 @@ class Dissolver(object):
     else:
       if self.isInOut(False, r, c, v, cls):
         v = self.ccw[v]        # Outside is ccw from [r, c] if not annulus
+	self.markBox(r, c, v0, region)  # mark the inside box and outside
 
-    # mark the box after you move and have a direction
-    # the boxes will be marked when you return
-    #if not annulus:
+    # mark the box inside in the direction v0 you came from [r,c]
     self.markBox(r, c, v, region) 
 
     if v != v0: # if you changed direction, output vertex
       if self.args.verbosity >= 6:
-        print 'Writing state ([{0}, {1}], {2}, {3}, {4})'.format(r, c, self.diag[v], 
+	print 'Changed direction: ([{0}, {1}], {2}, {3}, {4})'.format(r, c, 
+			                                         self.diag[v], 
 			                                         cls, region)
-
     while r != r0 or c != c0:
       r, c = self.move(r, c, v)  # move in direction v
       v0 = v                     # save the previous direction
       # define the next direction
       if not self.isInOut(True, r, c, v, cls):
-        v = self.cw[v]                # cw from [r, c] if not annulus
+        v = self.cw[v]           # cw from [r, c] if not annulus
       else:
         if self.isInOut(False, r, c, v, cls):
-          v = self.ccw[v]             # ccw from [r, c] if not annulus
+          v = self.ccw[v]        # ccw from [r, c] if not annulus
+	  self.markBox(r, c, v0, region)  # mark the inside box and outside
 
-      # you moved and have a direction -- mark the inside box
-      # the same box will be marked for each move...oh well
-      #if not annulus:
+      # mark the box inside in the direction v from [r,c]
       self.markBox(r, c, v, region)
 
       if v != v0:
         if self.args.verbosity >= 6:
-          print 'Writing state ([{0}, {1}], {2}, {3}, {4})'.format(r,c,self.diag[v], 
-			                                      cls, region)
-
+	  print 'Changed direction: ([{0}, {1}], {2}, {3}, {4})'.format(r, c, 
+			                                           self.diag[v], 
+			                                           cls, region)
 
 class Raster(object):
   """Raster objects hold the grid of pixes, which can be passed to Dissolve objects
@@ -490,7 +562,7 @@ class Raster(object):
       print "Reshaping array to grid..."
     self.grid = np.reshape( grid1D, (hdr.nrows, hdr.ncols) )
 
-
+# if __name__ == '__main__':  goes here
 
 args = parser.parse_args()  # parse command line arguments
 
