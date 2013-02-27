@@ -250,7 +250,9 @@ class Dissolver(object):
     # Square brackets denote box coordinates, parentheses denote pixel coordinates.
     self.boxRows  = 2*hdr.nrows + 1
     self.boxCols  = 2*hdr.ncols + 1
-    self.box   = np.zeros(shape = (self.boxRows, self.boxCols), dtype = np.int8) 
+
+    self.box   = np.zeros(shape = (self.boxRows, self.boxCols), dtype = np.int16) 
+
     if self.args.coords == None:
       self.i =  0  # CAUTION: the nextValid() function starts from (i,j+1)
       self.j = -1  # and must be called to set the current valid pixel
@@ -283,10 +285,10 @@ class Dissolver(object):
     # This is precisely the behavior one wants. The upper left hand corner is
     # in region 1, by definition. All other region numbers are defined as
     # the program runs.
-    self.region2class = { 0 : np.nan, 1 : 0 }
+    self.region2class = { 0 : np.nan }  # the outside region
 
     # Global locally simply connected region number
-    self.region = 1  # The box at [r,c] is marked by the region number    
+    self.region = 0  # The box at [r,c] is marked by the region number    
 
   def move(self, r, c, v):
     """recompute box coordinates using the mov enum"""
@@ -424,9 +426,10 @@ class Dissolver(object):
     if not self.isBoxCoord(rLeft, cLeft):
       # left invalid, look above
       if not self.isBoxCoord(rTop, cTop):
-        self.box[self.r][self.c] = 1  
-	self.region2class[1] = myCls
-        return (1, vx.r)    
+	self.region += 1
+	self.region2class[self.region] = float(myCls)
+        self.box[self.r][self.c] = self.region  
+        return (self.region, vx.r)    
       else:
 	# Top is defined -- get cls
 	if self.getCls(rTop, cTop) == myCls:
@@ -437,7 +440,7 @@ class Dissolver(object):
         else:
 	  # my class is new at the left edge.
 	  self.region += 1
-	  self.region2class[self.region] = myCls  # add the new region
+	  self.region2class[self.region] = float(myCls)  # add the new region
           self.box[self.r][self.c] = self.region
 	  return (self.region, vx.r)
 
@@ -452,7 +455,7 @@ class Dissolver(object):
       else:
       # New class
         self.region += 1
-	self.region2class[self.region] = myCls  # add the new region
+	self.region2class[self.region] = float(myCls)  # add the new region
         self.box[self.r][self.c] = self.region
 	return (self.region, vx.r)
 
@@ -460,10 +463,18 @@ class Dissolver(object):
     leftRegion = self.box[rLeft][cLeft]
     topRegion  = self.box[rTop][cTop]
 
-    if myCls == self.region2class[topRegion]:
-      self.box[self.r][self.c] = topRegion
-      # you cannot move right -- crossing deleted edge
-      return (topRegion, vx.z)
+    try:
+      if myCls == self.region2class[topRegion]:
+        self.box[self.r][self.c] = topRegion
+        # you cannot move right -- crossing deleted edge
+        return (topRegion, vx.z)
+    except KeyError:
+      print 'EXCEPTION: box[{0}][{1}] topRegion {2} top box [{3},{4}] not in map, myCls {5}'.format(
+		      self.r, self.c, topRegion, rTop, cTop, myCls)
+      print 'self.box[{0}][{1}] = {2} next available region {3}'.format(
+		      rTop,cTop,self.box[rTop][cTop], self.region)
+      print self.region2class
+      exit(-2)
 
     if myCls == self.region2class[leftRegion]:
       self.box[self.r][self.c] = leftRegion
@@ -484,12 +495,15 @@ class Dissolver(object):
 
     # get the classification of the new box
     (region, v) = self.boxRegion()  # All boxes visited will be marked with region 
+    if region < 0:
+      print 'FATAL: region is {0} < 0'.format(region)
+
+    cls =  self.getCls(self.r, self.c)  # the class is needed to determine direction
 
     r = self.r-1
     c = self.c-1
 
     if self.args.verbosity >= 5:
-      cls =  self.getCls(self.r, self.c)
       print 'Traverse box [{0},{1}], vertex [{2},{3}] vector {4} region {5} class {6}.'.format(
 	self.r, self.c, r, c, self.diag[v], region, cls)
 
