@@ -215,6 +215,33 @@ def enum(**enums):
 # vertex directions
 vx = enum(z=0, r=1, d=2, l=3, u=4)
 
+class PolygonDB(object):
+  """List of polygons and potential holes created by Dissolver object"""
+
+  def __init__(self, args):
+    """Create the initial table of polygons. Each polygon as a region number,
+    starting coordinates (r, c) and a list of potential holes with their
+    starting coordinates."""
+
+    self.poly = dict()  # create empty dictionary of polygon lists
+
+  def addPolygon(self, region, r, c):
+    """Add polygon with region number 'region' and top left coordinates [r, c] to list"""
+
+    self.poly[region] = [(r-1, c-1)]
+
+  def dump(self):
+    for key in self.poly:
+      polyList = self.poly[key]
+      print 'region {0} start {1} holes {2}'.format(key, polyList[0], polyList[1:])
+
+ 
+
+  def addHole(self, region, r, c):
+    """Add the coordinates of the potiential hole associated to region
+    The coordinates are the top right  of the box at [r,c].  Traverse counter 
+    clockwise such that the outside is  the 'not region' region"""
+    self.poly[region].append((r-1, c+1))
 
 class Dissolver(object):
   """Dissolve polygons in raster space. Uses box coordinate representation.
@@ -233,17 +260,19 @@ class Dissolver(object):
       Note: Left, Top, Right and Bot aren't used. A little wasteful.
   """
 
-  def __init__(self, args, hdr, ext, raster):
+  def __init__(self, args, hdr, ext, raster, polyDB):
     """Create a Dissolver, using 
-       args -- parsed arguments 
-       hdr  -- Grid ASCII header 
-       ext  -- extent of grid in coordinate space
-       raster -- reshaped grid"""
+       args   -- parsed arguments 
+       hdr    -- Grid ASCII header 
+       ext    -- extent of grid in coordinate space
+       raster -- reshaped grid
+       polyDB -- polygon/hole database"""
 
     self.args = args
     self.hdr  = hdr
     self.ext  = ext
     self.raster = raster  # this is a raster object
+    self.polyDB = polyDB
 
 
     # Create the box coordinate space (i, j) -> [2*i+1, 2*j+1]
@@ -347,14 +376,14 @@ class Dissolver(object):
     """
     r0 = r + self.insideR[v]
     c0 = c + self.insideC[v]
-    if self.args >= 4:
+    if self.args >= 6:
       print 'Marking box [{0},{1}] at vertex [{2},{3}] in direction {4} region {5}'.format(
 		      r0, c0, r, c, self.diag[v],region )
     self.box[r0][c0] = region
 
   def isInOut(self, isIn, r, c, v, cls):
-    """Returns True if the square clockwise (ccw if isIn is False) 
-       from v at [r, c] exists and is in the class cls; false otherwise."""
+    """Returns True if the square clockwise (counterclockwise if isIn is False) from 
+    vector v at direction[r, c] exists and is in the class cls; false otherwise."""
     if isIn:   
       r += self.insideR[v]
       c += self.insideC[v]
@@ -371,6 +400,7 @@ class Dissolver(object):
     return False
 
 
+  # not used 
   def getOutsideRegion(self, r, c, v):
    """Get region of box outside vertex [r,c] in direction v"""
 
@@ -427,11 +457,12 @@ class Dissolver(object):
       # left invalid, look above
       if not self.isBoxCoord(rTop, cTop):
 	self.region += 1
-	self.region2class[self.region] = float(myCls)
+        self.polyDB.addPolygon(self.region, self.r, self.c)
+	self.region2class[self.region] = myCls
         self.box[self.r][self.c] = self.region  
         return (self.region, vx.r)    
       else:
-	# Top is defined -- get cls
+	# Left undefined, Top is defined -- get cls
 	if self.getCls(rTop, cTop) == myCls:
 	  region = self.box[rTop][cTop]
           self.box[self.r][self.c] = region
@@ -440,7 +471,8 @@ class Dissolver(object):
         else:
 	  # my class is new at the left edge.
 	  self.region += 1
-	  self.region2class[self.region] = float(myCls)  # add the new region
+          self.polyDB.addPolygon(self.region, self.r, self.c)
+	  self.region2class[self.region] = myCls  # add the new region
           self.box[self.r][self.c] = self.region
 	  return (self.region, vx.r)
 
@@ -455,7 +487,8 @@ class Dissolver(object):
       else:
       # New class
         self.region += 1
-	self.region2class[self.region] = float(myCls)  # add the new region
+        self.polyDB.addPolygon(self.region, self.r, self.c)
+	self.region2class[self.region] = myCls  # add the new region
         self.box[self.r][self.c] = self.region
 	return (self.region, vx.r)
 
@@ -466,6 +499,13 @@ class Dissolver(object):
     try:
       if myCls == self.region2class[topRegion]:
         self.box[self.r][self.c] = topRegion
+	if myCls != leftCls:
+	  # self.polyDB.addHole(topRegion, self.r, self.c) # top right of left square
+	  # not reliable: a completed polygon can mark my class even if it is a hole
+	  if self.args.verbosity >= 5:
+            print "Potential hole at [{0}, {1}] region {2} my region {3}".format(
+			  self.r, self.c-2, leftRegion, topRegion)
+
         # you cannot move right -- crossing deleted edge
         return (topRegion, vx.z)
     except KeyError:
@@ -482,6 +522,11 @@ class Dissolver(object):
 
     # new region
     self.region += 1
+    self.polyDB.addPolygon(self.region, self.r, self.c)
+    if self.region2class[leftRegion] == self.region2class[topRegion]:
+      # to be sure, find the diagonally oppostite region at [self.r-2, self.c-2]
+      if leftRegion == self.box[self.r-2, self.c-2]:
+        self.polyDB.addHole(leftRegion, self.r, self.c)  # this may be the only consistent test
     self.region2class[self.region] = myCls  # add the new region
     self.box[self.r][self.c] = self.region
     return (self.region, vx.r)
@@ -511,6 +556,7 @@ class Dissolver(object):
       if self.args.verbosity >=6:
 	print 'Traverse box: exiting, cannot go right'
       return
+
 
     # the direction and the region are known
     r0, c0 = r, c  # remember the initial vertex [r0, c0]
@@ -576,79 +622,80 @@ class Raster(object):
       print "Reshaping array to grid..."
     self.grid = np.reshape( grid1D, (hdr.nrows, hdr.ncols) )
 
-# if __name__ == '__main__':  goes here
-
-args = parser.parse_args()  # parse command line arguments
-
-
-hdr = ArcInfoGridASCII(args)
-ext = ExtentHandler(hdr, args)
-raster = Raster(args, hdr)
+if __name__ == '__main__':  
+  args = parser.parse_args()  # parse command line arguments
+  hdr = ArcInfoGridASCII(args)
+  ext = ExtentHandler(hdr, args)
+  raster = Raster(args, hdr)
 
 
-# create the shapefile
-driverName = "ESRI Shapefile"
-drv = ogr.GetDriverByName( driverName )
-if drv is None:
-  raise ValueError, "{0} driver not available.".format(driverName)
+  # create the shapefile
+  driverName = "ESRI Shapefile"
+  drv = ogr.GetDriverByName( driverName )
+  if drv is None:
+    raise ValueError, "{0} driver not available.".format(driverName)
 
-shpFile = args.outfile
-if os.path.exists( shpFile ):
-  drv.DeleteDataSource( shpFile )
+  shpFile = args.outfile
+  if os.path.exists( shpFile ):
+    drv.DeleteDataSource( shpFile )
 
-ds = drv.CreateDataSource( shpFile )
-if ds is None:
-  raise IOError, "Creation of output file {0} failed.".format(shpFile)
+  ds = drv.CreateDataSource( shpFile )
+  if ds is None:
+    raise IOError, "Creation of output file {0} failed.".format(shpFile)
 
-spatialReference = None
-if args.wgs84:
-  spatialReference = osr.SpatialReference()
-  spatialReference.ImportFromProj4('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
-layer = ds.CreateLayer( args.layer , spatialReference, ogr.wkbPolygon )
-if layer is None:
-  raise ValueError, "Layer creation failed."
+  spatialReference = None
+  if args.wgs84:
+    spatialReference = osr.SpatialReference()
+    spatialReference.ImportFromProj4('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+  layer = ds.CreateLayer( args.layer , spatialReference, ogr.wkbPolygon )
+  if layer is None:
+    raise ValueError, "Layer creation failed."
 
-# define the attribute at the centroid of the grid square
-# a future version should set the type of the field from the command line
-fieldef = ogr.FieldDefn( args.attr , ogr.OFTReal )
-if layer.CreateField ( fieldef ) != 0:
-  raise ValueError, "OGR field definition failed."
+  # define the attribute at the centroid of the grid square
+  # a future version should set the type of the field from the command line
+  fieldef = ogr.FieldDefn( args.attr , ogr.OFTReal )
+  if layer.CreateField ( fieldef ) != 0:
+    raise ValueError, "OGR field definition failed."
 
-if args.verbosity >= 1:
-  print 'Converting to shapefile...'
+  if args.verbosity >= 1:
+    print 'Converting to shapefile...'
 
-if not args.quiet: # show the progress bar unless instructed otherwise
-  pbar = ProgressBar(widgets=[Percentage(), Bar()], maxval = hdr.nrows).start()
+  if not args.quiet: # show the progress bar unless instructed otherwise
+    pbar = ProgressBar(widgets=[Percentage(), Bar()], maxval = hdr.nrows).start()
 
-if not args.dissolve:
-  for row  in range(0, hdr.nrows):
-    for col in range(0, hdr.ncols):
-      v = raster.grid[row][col]
-      if v != hdr.nodata and (not args.nonzero or v != 0):
-        lon, lat = hdr.cart2geo(row, col) # Note reversal!
-        if ext.compare(lat, lon):
-          poly = hdr.createGridSquare(lat, lon)
-          feature = ogr.Feature( layer.GetLayerDefn() )
-          if args.multiplier != None:
-	    v = int(v * args.multiplier)
-          feature.SetField(args.attr, v)
-          feature.SetGeometry(poly) # set the attribute
-          if layer.CreateFeature(feature):
-            raise ValueError, "Could not create feature in shapefile."
-          feature.Destroy()
-    if not args.quiet:
-      pbar.update(row+1)
-else:
-  dis = Dissolver(args, hdr, ext, raster) 
-  if args.verbosity >= 5:
-    print raster.grid
-  while dis.nextValid(): # find the next valid box in raster/box coordinates
-    dis.traverse() # traverse boundary
+  if not args.dissolve:
+    for row  in range(0, hdr.nrows):
+      for col in range(0, hdr.ncols):
+        v = raster.grid[row][col]
+        if v != hdr.nodata and (not args.nonzero or v != 0):
+          lon, lat = hdr.cart2geo(row, col) # Note reversal!
+          if ext.compare(lat, lon):
+            poly = hdr.createGridSquare(lat, lon)
+            feature = ogr.Feature( layer.GetLayerDefn() )
+            if args.multiplier != None:
+	      v = int(v * args.multiplier)
+            feature.SetField(args.attr, v)
+            feature.SetGeometry(poly) # set the attribute
+            if layer.CreateFeature(feature):
+              raise ValueError, "Could not create feature in shapefile."
+            feature.Destroy()
+      if not args.quiet:
+        pbar.update(row+1)
+  else:
+    polyDB = PolygonDB(args)
+    dis = Dissolver(args, hdr, ext, raster, polyDB) 
     if args.verbosity >= 5:
-      print dis.box
+      print raster.grid
+    while dis.nextValid(): # find the next valid box in raster/box coordinates
+      dis.traverse() # traverse boundary
+      if args.verbosity >= 5:
+        print dis.box
 
-if not args.quiet:
-  pbar.finish()
+    # dump the polygons
+    polyDB.dump()
 
-ds.Destroy()
+  if not args.quiet:
+    pbar.finish()
+
+  ds.Destroy()
 
