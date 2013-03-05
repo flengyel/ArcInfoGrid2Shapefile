@@ -371,6 +371,23 @@ class Dissolver(object):
 	 return True
     return False
 
+  def isSucc(self, r, c):
+    """Check if [r, c] is the successor of [self.r, self.c]"""
+    #Case 1: [r, c] == [self.r, c+2]
+    if self.r == r and self.c + 2 == c:
+      return True
+    #Case 2: [r, c] == [self.r+2, 1] and self.c == self.boxCols-2
+    if r == self.r+2 and c == 1 and self.c == self.boxCols-2:
+      return True
+    return False
+
+  def advCrnt(self, r, c):
+    """Advance the last marked box [self.r, self.c] to [r, c].
+       Use with isSuccessor()."""
+    if self.isSuccessor(r, c):
+      self.r, self.c = r,c
+      self.i, self.j = self.box2pixel(r, c)
+
   def markBox(self, r, c, v, region):
     """Mark the inside  box at vertex [r, c] in direction v. 
     """
@@ -380,6 +397,9 @@ class Dissolver(object):
       print 'Marking box [{0},{1}] at vertex [{2},{3}] in direction {4} region {5}'.format(
 		      r0, c0, r, c, self.diag[v],region )
     self.box[r0][c0] = region
+    # experimental:
+    if self.isSucc(r, c):
+      self.advCrnt(r, c)
 
   def isInOut(self, isIn, r, c, v, cls):
     """Returns True if the square clockwise (counterclockwise if isIn is False) from 
