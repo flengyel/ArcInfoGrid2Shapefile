@@ -36,10 +36,6 @@ class ArcInfoGridASCII(object):
       print '{0}: {1}'.format(fieldname, field[1])
     return value
 
-  def putField(self, fd, fieldname, val):
-    """Write field to file as text"""
-    fd.write('{0:<14}{1!s}\n'.format(fieldname, val))
-
   def __init__(self, args):
     if args.verbosity >= 1:
       print "Reading header..."
@@ -68,15 +64,32 @@ class ArcInfoGridASCII(object):
     self.xur    = self.xll + self.ncols * self.cell
     self.yur    = self.yll + self.nrows * self.cell
 
-  def write(self):
+  def putField(self, fd, fieldname, val):
+    """Write field to file as text"""
+    fd.write('{0:<14}{1!s}\n'.format(fieldname, val))
+
+  def writeReclass(self, args, raster, endpoints):
     """Write the reclassified file"""	    
     with open(args.outfile, 'w') as fd:
+      # Write header
       self.putField(fd, 'ncols', self.ncols)
       self.putField(fd, 'nrows', self.nrows)
       self.putField(fd, 'xllcorner', self.xll)
       self.putField(fd, 'yllcorner', self.yll)
       self.putField(fd, 'cellsize', self.cell)
       self.putField(fd, 'NODATA_value', int(self.nodata)) # must be int
+      # Write reclassified data based on endpoints
+      for row  in range(0, hdr.nrows):
+        for col in range(0, hdr.ncols):
+          v = raster.grid[row][col]
+          if v != hdr.nodata:
+	    if args.scaling > 1:
+	      v = int(v * args.scaling)
+            cat = np.searchsorted(endpoints, v, side='right')
+	  else:
+	    cat = int(self.nodata)
+          fd.write('%i ' % cat)
+        fd.write('\n')  	
 
 
   def cart2geo(self, row, col):  
@@ -276,18 +289,7 @@ if __name__ == '__main__':
     print endpoints
     exit(0)
 
-  for row  in range(0, hdr.nrows):
-    for col in range(0, hdr.ncols):
-      v = raster.grid[row][col]
-      if v != hdr.nodata:
-	if args.scaling > 1:
-	  v = int(v * args.scaling)
-        cat = np.searchsorted(endpoints, v, side='right')
-	print 'value:{0}, category:{1}'.format(v, cat)
-#     else:
-#       print int(hdr.nodata)	
-
-  hdr.write()
+  hdr.writeReclass(args, raster, endpoints)
 
   if not args.quiet:
     pbar.finish()
