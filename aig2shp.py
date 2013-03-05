@@ -402,22 +402,37 @@ class Dissolver(object):
       self.advCrnt(r, c)
 
   def isInOut(self, isIn, r, c, v, cls):
-    """Returns True if the square clockwise (counterclockwise if isIn is False) from 
-    vector v at direction[r, c] exists and is in the class cls; false otherwise."""
+    """Returns True if the square clockwise (ccw if isIn is False) 
+       from [r, c] in  direction v exists and is in the class cls; 
+       false otherwise."""
     if isIn:   
       r += self.insideR[v]
       c += self.insideC[v]
     else:
       r += self.outsideR[v]
       c += self.outsideC[v]
-
     if not self.isBoxCoord(r, c): 
       return False
     # [r, c] coordinates valid
     i, j = self.box2pixel(r, c)  # get corresponding raster coordinates
-    if self.raster.grid[i][j] == cls:
-      return True
-    return False
+    return (self.raster.grid[i][j] == cls)
+
+
+  # more optimized version for second pass, after all regions identified
+  def isInOutReg(self, isIn, r, c, v, reg):
+    """Returns True if the square clockwise (ccw if isIn is False) 
+       from [r, c] in  direction v exists and is in the region reg; 
+       false otherwise."""
+    if isIn:   
+      r += self.insideR[v]
+      c += self.insideC[v]
+    else:
+      r += self.outsideR[v]
+      c += self.outsideC[v]
+    if not self.isBoxCoord(r, c): 
+      return False
+    # [r, c] coordinates valid
+    return (self.box[i][j] == reg)
 
 
   # not used 
@@ -704,11 +719,11 @@ if __name__ == '__main__':
   else:
     polyDB = PolygonDB(args)
     dis = Dissolver(args, hdr, ext, raster, polyDB) 
-    if args.verbosity >= 5:
+    if args.verbosity >= 6:
       print raster.grid
     while dis.nextValid(): # find the next valid box in raster/box coordinates
       dis.traverse() # traverse boundary
-      if args.verbosity >= 5:
+      if args.verbosity >= 6:
         print dis.box
 
     # dump the polygons
