@@ -10,13 +10,10 @@ determines the size of the grid squares.
 In contrast to the [ArcGIS Raster to Polygon](http://help.arcgis.com/en/arcgisdesktop/10.0/help/index.html#//001200000008000000) and the [gdal_polygonize.py](http://www.gdal.org/gdal_polygonize.html) 
 raster to polygon feature layer conversion utilities, <code>aig2shp.py</code> does not require 
 float raster values to be discretized into (nonnegative) integer values before conversion.  Your 
-raster data is preserved, which may have some advantages for geospatial analysis.  One disadvantage 
-is that data isn't compressed, since a discrete classification isn't used.  Discretization of raster 
-values can facilitate symbology assignment for cartographic display, and may be offered in future 
-revisions.  Taking unions of adjacent grid squares with the same value isn't attempted. However, 
-this leaves open the possibility of simultaneous vectorization of multiple raster files so that a 
-vector grid square (at the highest resolution) is associated with multiple attributes, each from 
-different rasters. (Not supported so far.)
+raster data is preserved, which may have some advantages for geospatial analysis.  Nevertheless,
+the vector files are large, so `arcinfo.py` is available to reclassify ArcInfo Grid ASCII raster
+files. (More on this to come.)
+
 
 The program was written to upload raster data in a format useable by 
 [CartoDB](http://www.cartodb.com). See the [following correspondence](https://groups.google.com/d/msg/cartodb/fbjRhgO-AMo/x8Mfy_Z_8DgJ) on the [CartoDB google group](https://groups.google.com/forum/?fromgroups=#!forum/cartodb).
