@@ -28,11 +28,6 @@ parser.add_argument('-a', '--attr',
                     metavar='attribute',
 		    default='value',
 		    help='Name of attribute for ArcInfo grid values. Defaults to "value."')
-parser.add_argument('-c', '--coords',
-		    nargs=2,
-		    type=int,
-		    metavar=('row', 'col'),
-		    help='Debugging input. Raster coordinates of starting pixel.')
 parser.add_argument('-d', '--dissolve',
 		    action='store_true',
 		    help='Dissolve Arc Info ASCII Grid in (row, col) space before converting to shapefile.')
@@ -227,7 +222,6 @@ class PolygonDB(object):
 
   def addPolygon(self, region, r, c):
     """Add polygon with region number 'region' and top left coordinates [r, c] to list"""
-
     self.db[region] = [(r-1, c-1)]
 
   def dump(self):
@@ -281,12 +275,8 @@ class Dissolver(object):
 
     self.box   = np.zeros(shape = (self.boxRows, self.boxCols), dtype = np.int16) 
 
-    if self.args.coords == None:
-      self.i =  0  # CAUTION: the nextValid() function starts from (i,j+1)
-      self.j = -1  # and must be called to set the current valid pixel
-    else:
-      self.i, self.j = self.args.coords
-      self.j -= 1  # back up since nextValid() starts from (i, j+1)
+    self.i =  0  # CAUTION: the nextValid() function starts from (i,j+1)
+    self.j = -1  # and must be called to set the current valid pixel
 
     # define maps to add to [r,c] vertex coordinates
     self.goR    = { vx.r   :  0,  vx.d :  2, vx.l   :  0,  vx.u : -2}
@@ -320,7 +310,7 @@ class Dissolver(object):
 
   def move(self, r, c, v):
     """recompute box coordinates using the mov enum"""
-    if self.args.verbosity >= 7:
+    if self.args.verbosity >= 8:
       r1 = r + self.goR[v]
       c1 = c + self.goC[v]
       edr = (r + r1) >> 1
@@ -345,8 +335,8 @@ class Dissolver(object):
     return ((r-1)>>1, (c-1)>>1)
   
   def nextValid(self):
-    """Find the next potential starting point [r,c] for an outer loop or an inner 
-       annulus ring."""
+    """Find the next starting point [r,c] of bounding polygon 
+       or potential annulus ring."""
 
     def isValid(self, i, j): # this local function isn't used elsewhere
       """True iff the pixel at (i, j) (box at [r, c]) has not been
@@ -392,13 +382,30 @@ class Dissolver(object):
     """
     r0 = r + self.insideR[v]
     c0 = c + self.insideC[v]
-    if self.args >= 6:
-      print 'Marking box [{0},{1}] at vertex [{2},{3}] in direction {4} region {5}'.format(
-		      r0, c0, r, c, self.diag[v],region )
+    if ((self.args.verbosity >= 6) or 
+         (self.args.verbosity >= 5 and region == 5)):
+      print 'Marking box [{0},{1}] at vertex [{2},{3}] in direction {4} region {5}'.format( r0, c0, r, c, self.diag[v],region )
+      for rr in xrange(max(0,r0-5),min(self.boxRows,r0+6)):
+        print "".join(str(dis.box[rr][cc]) for cc in 
+			xrange(max(0,c0-5),min(self.boxRows,c0+6)))
+    reg = self.box[r0][c0]
+    if (self.args.verbosity >= 5 and reg != 0 and reg == region):
+       print 'Already marked box [{0},{1}] with region {2} -- should be the start.'.format(r0, c0, region)
+
+    if (reg != 0 and reg != region):
+      # at this point you should return False and enter a path correction algorithm in 
+      # Traverse, that exits if this condition occurs.
+      k, l = self.box2pixel(r0, c0)
+      for i in xrange(max(0,k-2), min(self.hdr.nrows,k+3)):
+        print "".join(str(self.raster.grid[i][j])+' ' for j in
+			xrange(max(0,l-2),min(self.hdr.ncols,l+3)))
+      print 'ERROR: markBox(vertex=[{0}, {1}], vector={2},region={3}) center [{4},{5}]'.format(r, c, self.diag[v], region, r0, c0)
+      raise ValueError, '[{0},{1}] = {2} instead of {3}'.format(r0, c0, 
+		                                         reg, region)
     self.box[r0][c0] = region
     # experimental: -- seems to work and speed up the program
-    if self.isSucc(r, c):
-      self.advCrnt(r, c)
+    #if self.isSucc(r, c):
+    #  self.advCrnt(r, c)
 
   def isInOut(self, isIn, r, c, v, cls):
     """Returns True if the square clockwise (ccw if isIn is False) 
@@ -434,10 +441,11 @@ class Dissolver(object):
     return (self.box[r][c] == reg)
 
 
-  # Simply Connected Region handling. The upper left-hand corner has region 1, 
-  # valid or not, by  definition. If it is a nodata region, this is either treated 
-  # like every other region, or no polygon is generated for it. Provisionally nodata 
-  # regions are treated the same way as all others. For now, nodata is treated by
+  # Simply Connected Region handling. The upper left-hand corner has 
+  # region 1, valid or not, by  definition. If it is a nodata region, 
+  # this is either treated like every other region, or no polygon is 
+  # generated for it. Provisionally nodata  regions are treated the 
+  # same way as all others. For now, nodata is treated by
   # the algorithm as if it were a valid region.
 
   def getCls(self, r, c):
@@ -513,19 +521,12 @@ class Dissolver(object):
 	return (self.region, vx.r)
 
     # finally, the top and left are defined 
-    leftRegion = self.box[rLeft][cLeft]
     topRegion  = self.box[rTop][cTop]
+    leftRegion = self.box[rLeft][cLeft]
 
     try:
       if myCls == self.region2class[topRegion]:
         self.box[self.r][self.c] = topRegion
-	if myCls != leftCls:
-	  # self.polyDB.addHole(topRegion, self.r, self.c) # top right of left square
-	  # not reliable: a completed polygon can mark my class even if it is a hole
-	  if self.args.verbosity >= 5:
-            print "Potential hole at [{0}, {1}] region {2} my region {3}".format(
-			  self.r, self.c-2, leftRegion, topRegion)
-
         # you cannot move right -- crossing deleted edge
         return (topRegion, vx.z)
     except KeyError:
@@ -536,14 +537,17 @@ class Dissolver(object):
       print self.region2class
       exit(-2)
 
+    # my class differs from the top region  
+
     if myCls == self.region2class[leftRegion]:
       self.box[self.r][self.c] = leftRegion
       return (leftRegion, vx.r)
 
-    # new region
+    # my class starts a new region
     self.region += 1
     self.polyDB.addPolygon(self.region, self.r, self.c)
-    if self.region2class[leftRegion] == self.region2class[topRegion]:
+    #if self.region2class[leftRegion] == self.region2class[topRegion]:
+    if leftRegion == topRegion: # left and top region are defined
       # to be sure, find the diagonally oppostite region at [self.r-2, self.c-2]
       if leftRegion == self.box[self.r-2, self.c-2]:
         self.polyDB.addHole(leftRegion, self.r, self.c)  # this may be the only consistent test
@@ -593,14 +597,15 @@ class Dissolver(object):
         v = self.ccw[v]        # Outside is ccw from [r, c] 
 	self.markBox(r, c, v0, region)  # mark the inside box and outside
 
+
+    if v != v0: # if you changed direction, output vertex
+      if self.args.verbosity >= 5:
+	print 'Turn (pre while): ([{0}, {1}], {2}, {3}, {4})'.format(r, c, 
+			                                         self.diag[v], 
+			                                         cls, region)
     # mark the box inside in the direction v0 you came from [r,c]
     self.markBox(r, c, v, region) 
 
-    if v != v0: # if you changed direction, output vertex
-      if self.args.verbosity >= 6:
-	print 'Changed direction: ([{0}, {1}], {2}, {3}, {4})'.format(r, c, 
-			                                         self.diag[v], 
-			                                         cls, region)
     while r != r0 or c != c0:
       r, c = self.move(r, c, v)  # move in direction v
       v0 = v                     # save the previous direction
@@ -610,16 +615,19 @@ class Dissolver(object):
       else:
         if self.isInOut(False, r, c, v, cls):
           v = self.ccw[v]        # ccw from [r, c] if not annulus
+	  verbosity = self.args.verbosity
+	  if verbosity >= 6 or (verbosity >= 5 and region == 5):
+	    print 'While: going ccw from {0} to {1}'.format(
+			    self.diag[v0], self.diag[v])
 	  self.markBox(r, c, v0, region)  # mark the inside box and outside
 
+      if v != v0:
+        if self.args.verbosity >= 5:
+	  print 'Turn (while): ([{0}, {1}], {2}, {3}, {4})'.format(
+			  r, c, self.diag[v], cls, region)
       # mark the box inside in the direction v from [r,c]
       self.markBox(r, c, v, region)
 
-      if v != v0:
-        if self.args.verbosity >= 6:
-	  print 'Changed direction: ([{0}, {1}], {2}, {3}, {4})'.format(r, c, 
-			                                           self.diag[v], 
-			                                           cls, region)
   def isHole(self, r, c, region, r1, r2): 
     """Returns True iff [r, c] are the coordinates of a vertex (specifically, the
        upper right vertex of the upper left most pixel) of an inner ring of the
@@ -666,7 +674,7 @@ class Dissolver(object):
 	  return False
 
     if v != v0: # if you changed direction, output vertex
-      if self.args.verbosity >= 6:
+      if self.args.verbosity >= 4:
 	print 'isHole: Changed direction: ([{0}, {1}], {2}, {3})'.format(r, c, self.diag[v], 
 			                                                 region)
     while r != r0 or c != c0:
@@ -687,7 +695,7 @@ class Dissolver(object):
 	    return False
 
       if v != v0:
-        if self.args.verbosity >= 6:
+        if self.args.verbosity >= 4:
 	  print 'isHole: Changed direction: ([{0}, {1}], {2}, {3})'.format(r, c, self.diag[v], 
 			                                           region)
     # you made it!	  
@@ -781,18 +789,26 @@ if __name__ == '__main__':
       print raster.grid
     while dis.nextValid(): # find the next valid box in raster/box coordinates
       dis.traverse() # traverse boundary
-      if args.verbosity >= 6:
+      if args.verbosity >= 7:
         print dis.box
 
     # dump the polygons
     for region in polyDB.db:
       polyList = polyDB.db[region]
       print 'region {0} start {1} holes {2}'.format(region, polyList[0], polyList[1:])
-      for vertex in polyList[1:]:
-	r, c = vertex
-	r1, c1 = polyList[0]
-	if dis.isHole(r, c, region, r1, c1):
-	  print '[{0},{1}] is a hole of [{2},{3}]'.format(r, c, r1, c1)
+      if dis.region2class[region] == hdr.nodata:
+	print 'NODATA region'
+      else:
+        for vertex in polyList[1:]:
+	  r, c = vertex
+	  for rr in xrange(max(0,r-2),min(dis.boxRows,r+5)):
+	    print "".join(str(dis.box[rr][cc]) for cc in 
+			       xrange(max(0,c-4),min(dis.boxRows,c+3)))
+	  if args.verbosity < 6:
+	    exit(0)  
+	  r1, c1 = polyList[0]
+	  if dis.isHole(r, c, region, r1, c1):
+	    print '[{0},{1}] is a hole of [{2},{3}]'.format(r, c, r1, c1)
 
   if not args.quiet:
     pbar.finish()
