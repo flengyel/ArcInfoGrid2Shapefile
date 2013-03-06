@@ -223,25 +223,24 @@ class PolygonDB(object):
     starting coordinates (r, c) and a list of potential holes with their
     starting coordinates."""
 
-    self.poly = dict()  # create empty dictionary of polygon lists
+    self.db = dict()  # create empty dictionary of polygon lists
 
   def addPolygon(self, region, r, c):
     """Add polygon with region number 'region' and top left coordinates [r, c] to list"""
 
-    self.poly[region] = [(r-1, c-1)]
+    self.db[region] = [(r-1, c-1)]
 
   def dump(self):
-    for key in self.poly:
-      polyList = self.poly[key]
+    for key in self.db:
+      polyList = self.db[key]
       print 'region {0} start {1} holes {2}'.format(key, polyList[0], polyList[1:])
-
- 
 
   def addHole(self, region, r, c):
     """Add the coordinates of the potiential hole associated to region
     The coordinates are the top right  of the box at [r,c].  Traverse counter 
     clockwise such that the outside is  the 'not region' region"""
-    self.poly[region].append((r-1, c+1))
+    self.db[region].append((r-1, c+1))
+
 
 class Dissolver(object):
   """Dissolve polygons in raster space. Uses box coordinate representation.
@@ -397,7 +396,7 @@ class Dissolver(object):
       print 'Marking box [{0},{1}] at vertex [{2},{3}] in direction {4} region {5}'.format(
 		      r0, c0, r, c, self.diag[v],region )
     self.box[r0][c0] = region
-    # experimental:
+    # experimental: -- seems to work and speed up the program
     if self.isSucc(r, c):
       self.advCrnt(r, c)
 
@@ -432,21 +431,7 @@ class Dissolver(object):
     if not self.isBoxCoord(r, c): 
       return False
     # [r, c] coordinates valid
-    return (self.box[i][j] == reg)
-
-
-  # not used 
-  def getOutsideRegion(self, r, c, v):
-   """Get region of box outside vertex [r,c] in direction v"""
-
-   r0 = r+self.outsideR[v]
-   c0 = c+self.outsideC[v]
-   if not isBoxCoord(r0, c0):
-     return np.nan   # our convention for outside the raster (never equals anything!)
-   if self.args.verbosity >= 7:
-     print 'getRegion: box outside [{0},{1}] in direction {2} is [{3},{4}]'.format(
-		     r, c, self.diag[v], r0, c0)
-   return self.box[r0][c0]
+    return (self.box[r][c] == reg)
 
 
   # Simply Connected Region handling. The upper left-hand corner has region 1, 
@@ -567,16 +552,17 @@ class Dissolver(object):
     return (self.region, vx.r)
 
 
-
   def traverse(self): 
     """Traverse and build polygons with rings.
-       The state is ([r, c], v, v0, annulus): the current vertex and the current direction
+       The state is ([r, c], v, v0): the current vertex and the current and previous 
+       directions. The previous direction is needed to mark regions during a ccw turn.
     """	  
 
     # get the classification of the new box
     (region, v) = self.boxRegion()  # All boxes visited will be marked with region 
     if region < 0:
-      print 'FATAL: region is {0} < 0'.format(region)
+      print 'FATAL ERROR: region is {0} < 0. Too many regions.'.format(region)
+      exit(-1)
 
     cls =  self.getCls(self.r, self.c)  # the class is needed to determine direction
 
@@ -588,7 +574,7 @@ class Dissolver(object):
 	self.r, self.c, r, c, self.diag[v], region, cls)
 
     if v == vx.z:  # can't proceed
-      if self.args.verbosity >=6:
+      if self.args.verbosity >=7:
 	print 'Traverse box: exiting, cannot go right'
       return
 
@@ -601,10 +587,10 @@ class Dissolver(object):
     v0 = v                     # save the previous direction
 
     if not self.isInOut(True, r, c, v, cls):
-      v = self.cw[v]           # Inside is cw from [r, c] if not annulus
+      v = self.cw[v]           # Inside is cw from [r, c] 
     else:
       if self.isInOut(False, r, c, v, cls):
-        v = self.ccw[v]        # Outside is ccw from [r, c] if not annulus
+        v = self.ccw[v]        # Outside is ccw from [r, c] 
 	self.markBox(r, c, v0, region)  # mark the inside box and outside
 
     # mark the box inside in the direction v0 you came from [r,c]
@@ -634,6 +620,78 @@ class Dissolver(object):
 	  print 'Changed direction: ([{0}, {1}], {2}, {3}, {4})'.format(r, c, 
 			                                           self.diag[v], 
 			                                           cls, region)
+  def isHole(self, r, c, region, r1, r2): 
+    """Returns True iff [r, c] are the coordinates of a vertex (specifically, the
+       upper right vertex of the upper left most pixel) of an inner ring of the
+       region r. Traverse hole counterclockwise, using the potential hole list from 
+       the first pass.  The state is ([r, c], v, v0): the current vertex and the 
+       current and previous directions. The previous direction is used to verify 
+       regions during a ccw turn.
+
+       By moving counterclockwise, the same traversal algorithm as traverse() above
+       will traverse a "hole". This time a check needs to be performed at each
+       counterclockwise turn. Checks for the region are unnecessary when going "straight"
+       or clockwise, since the isInOutReg() predicates have checked the region number.
+       The starting configuration is the upper right vertex [r, c] of the upper rightmost
+       pixel of a potential hole, in which the top, diagonally upper left and left
+       pixels all have the same region R.
+
+       A gotcha: traversal of a potential hole could lead you outside the region. 
+       This happens if you move to the coordinates of any vertex of the bounding polygon.
+       Since the polygon database maintains the start vertex of the region, this
+       can be checked.
+
+       R   R  [r, c]
+       R   *
+    """	  
+
+    v = vx.l # go countercloclwise
+    # the direction and the region are known
+    r0, c0 = r, c  # remember the initial vertex [r0, c0]
+
+    r, c = self.move(r, c, v)  # move in direction v
+    if r == r1 and c == c1:    # check if on bounding polygon of region
+      return False
+    v0 = v                     # save the previous direction
+
+    if not self.isInOutReg(True, r, c, v, region):
+      v = self.cw[v]           # Inside is cw from [r, c] 
+    else:
+      if self.isInOutReg(False, r, c, v, region):
+        v = self.ccw[v]        # Outside is ccw from [r, c] 
+	#  After a ccw move, verify the inside and outside boxes
+	#  from [r, c] in the previous direction
+	if ((not self.isInOutReg(True, r, c, v0, region)) or
+		(not self.isInOutReg(False, r, c, v0, region))):
+	  return False
+
+    if v != v0: # if you changed direction, output vertex
+      if self.args.verbosity >= 6:
+	print 'isHole: Changed direction: ([{0}, {1}], {2}, {3})'.format(r, c, self.diag[v], 
+			                                                 region)
+    while r != r0 or c != c0:
+      r, c = self.move(r, c, v)  # move in direction v
+      if r == r1 and c == c1:    # outside since you passed through [r1, c1]
+	return False
+      v0 = v                     # save the previous direction
+      # define the next direction
+      if not self.isInOutReg(True, r, c, v, region):
+        v = self.cw[v]           # cw from [r, c] if not annulus
+      else:
+        if self.isInOutReg(False, r, c, v, region):
+          v = self.ccw[v]        # ccw from [r, c] if not annulus
+	  #  After a ccw move, verify the inside and outside boxes
+	  #  from [r, c] in the previous direction
+	  if ((not self.isInOutReg(True, r, c, v0, region)) or
+		(not self.isInOutReg(False, r, c, v0, region))):
+	    return False
+
+      if v != v0:
+        if self.args.verbosity >= 6:
+	  print 'isHole: Changed direction: ([{0}, {1}], {2}, {3})'.format(r, c, self.diag[v], 
+			                                           region)
+    # you made it!	  
+    return True	  
 
 class Raster(object):
   """Raster objects hold the grid of pixes, which can be passed to Dissolve objects
@@ -727,7 +785,14 @@ if __name__ == '__main__':
         print dis.box
 
     # dump the polygons
-    polyDB.dump()
+    for region in polyDB.db:
+      polyList = polyDB.db[region]
+      print 'region {0} start {1} holes {2}'.format(region, polyList[0], polyList[1:])
+      for vertex in polyList[1:]:
+	r, c = vertex
+	r1, c1 = polyList[0]
+	if dis.isHole(r, c, region, r1, c1):
+	  print '[{0},{1}] is a hole of [{2},{3}]'.format(r, c, r1, c1)
 
   if not args.quiet:
     pbar.finish()
