@@ -4,12 +4,11 @@ Vectorization of ArcInfo Grid ASCII files as ESRI Shapefiles.
 Python program to convert an ArcInfo Grid ASCII raster file to an ESRI 
 shapefile in one of two formats: 
 
-# with a single layer containing oriented grid square polygons centered at the pixels of the grid; and
-# with a single layer containing "dissolved" polygons. The dissolve is performed
+* with a single layer containing oriented grid square polygons centered at the pixels of the grid; and
+* with a single layer containing "dissolved" polygons. The dissolve is performed
 in the (row, column) coordinates of the raster space. 
 
-
-Each polygon contains an attribute value equal to the value of the corresponding ArcInfo raster pixel. 
+Each polygon contains an attribute value equal to the value of the corresponding pixel of the ArcInfo Grid ASCII raster file. 
 
 The ArcInfo Grid ASCII header <code>cellsize</code> parameter
 determines the size of the grid squares. 
