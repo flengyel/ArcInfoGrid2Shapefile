@@ -45,6 +45,9 @@ parser.add_argument('-m', '--multiplier',
 parser.add_argument('-n', '--nonzero', 
 		    action="store_true",
 		    help='Exclude zero values.')
+parser.add_argument('-O', '--opt',
+		    action='store_true',
+		    help='Enable greedy cell marking optimization.')
 parser.add_argument('-q', '--quiet', 
 		    action="store_true",
 		    help='Suppress progress bar.')
@@ -53,7 +56,7 @@ parser.add_argument('-v', '--verbosity',
 		    help="Display verbose message output. Each additional 'v' increases message verbosity: -vv is very verbose, and -vvv is very very verbose.")
 parser.add_argument('--version', 
 		    action='version', 
-		    version='%(prog)s 0.3',
+		    version='%(prog)s 0.4',
 		    help='Show program version number and exit.')
 parser.add_argument('--wgs84', 
 		    action="store_true", 
@@ -310,21 +313,12 @@ class Dissolver(object):
 
   def move(self, r, c, v):
     """recompute box coordinates using the mov enum"""
-    if self.args.verbosity >= 8:
-      r1 = r + self.goR[v]
-      c1 = c + self.goC[v]
-      edr = (r + r1) >> 1
-      edc = (c + c1) >> 1
-      self.box[edr][edc] -= 1
-      if self.box[edr][edc] < -2:
-        raise ValueError, 'Edge [{0},{1}] visited more than twice.'.format(edr,edc)
     return (r + self.goR[v], c + self.goC[v])
 
   def isBoxCoord(self, r, c):
     """True iff [r,c] is a valid box coordinate"""
     return ((0 <= r) and (r <  self.boxRows) and 
 		  (0 <= c) and c <  (self.boxCols))
-
 
   def pixel2box(self, i, j):
     """Box coordinates [r, c] of pixel at raster coordinates (i, j)"""
@@ -382,8 +376,16 @@ class Dissolver(object):
        from direction v"""
     return (self.box[r+self.insideR[v]][c+self.insideC[v]])
 
+  def stampBox(self, r, c, v, region):
+    """Like markBox below, only without checking.
+       Used by pathFix()"""
+    self.box[r+self.insideR[v]][c+self.insideC[v]] = region
+
   def markBox(self, r, c, v, region):
-    """Mark the inside  box at vertex [r, c] in direction v. 
+    """Mark the inside  box [r0, c0] at vertex [r, c] in direction v. 
+       Return True if the self.box[r0][c0] is 0 or is already marked
+       region; return False if the box is nonzero and marked with
+       some other region
     """
     r0 = r + self.insideR[v]
     c0 = c + self.insideC[v]
@@ -402,7 +404,7 @@ class Dissolver(object):
 		         r0, c0, region)
 
     if (reg != 0 and reg != region):
-      # return False and enter a pathFixup algorithm  
+      # return False and enter pathFix() algorithm  
       # Traverse, then exit if this condition occurs.
       if (verbosity >= 6):
         k, l = self.box2pixel(r0, c0)
@@ -415,7 +417,10 @@ class Dissolver(object):
       return False	# don't set the region! This is the stopping point
     self.box[r0][c0] = region
     # experimental: -- seems to work and speed up the program
-    #if self.isSucc(r, c):
+    
+    # This seems to add nothing in practice
+    #if self.args.opt and self.isSucc(r, c):
+    #  print 'optimize!'
     #  self.advCrnt(r, c)
     return True
 
@@ -467,8 +472,9 @@ class Dissolver(object):
 
   def boxRegion(self):
     """Determine the region of the new box. Inductive assumption:
-       The boxes left and above have assigned regions. The upper left has region 1.
-       The region2class[] map is defined for the boxes left and above.
+       The boxes left and above have assigned regions. The upper 
+       left has region 1.  The region2class[] map is defined for the 
+       boxes left and above.
 
        This routine needs to check whether the traversal can proceed, and in
        which direction.  Check the box above and to your left.    
@@ -478,7 +484,8 @@ class Dissolver(object):
        (0,nan)   (R, cls) if Box.cls == cls then (R, vx,0) don't go anywhere!
                           you'll cross an edge!
 			  if Box.cls != cls, then (new R, vx.r) 
-       (R, cls)  (0, nan) if Box.cls == cls, then error -- you should have been here
+       (R, cls)  (0, nan) if Box.cls == cls, then error -- you should have 
+                             been here
        (R, x)    (R, x)   If Box.cls == x, then (R, vx.0) -- don't traverse
        (R, x)    (S, y)   if Box.cls == x, then (R, vx.r) you can go right
                           if Box.cls == y  then (S, vx.0) you cannot move
@@ -542,8 +549,7 @@ class Dissolver(object):
         # you cannot move right -- crossing deleted edge
         return (topRegion, vx.z)
     except KeyError:
-      print 'EXCEPTION: box[{0}][{1}] topRegion {2} top box [{3},{4}] not in map, myCls {5}'.format(
-		      self.r, self.c, topRegion, rTop, cTop, myCls)
+      print 'EXCEPTION: box[{0}][{1}] topRegion {2} top box [{3},{4}] not in map, myCls {5}'.format( self.r, self.c, topRegion, rTop, cTop, myCls)
       print 'self.box[{0}][{1}] = {2} next available region {3}'.format(
 		      rTop,cTop,self.box[rTop][cTop], self.region)
       print self.region2class
@@ -555,17 +561,75 @@ class Dissolver(object):
       self.box[self.r][self.c] = leftRegion
       return (leftRegion, vx.r)
 
-    # my class starts a new region
+    # my class starts a new region -- this could join with others.
     self.region += 1
     self.polyDB.addPolygon(self.region, self.r, self.c)
     #if self.region2class[leftRegion] == self.region2class[topRegion]:
     if leftRegion == topRegion: # left and top region are defined
       # to be sure, find the diagonally oppostite region at [self.r-2, self.c-2]
       if leftRegion == self.box[self.r-2, self.c-2]:
-        self.polyDB.addHole(leftRegion, self.r, self.c)  # this may be the only consistent test
+        # this is potentially a hole -- you may have to undo
+        self.polyDB.addHole(leftRegion, self.r, self.c)  
     self.region2class[self.region] = myCls  # add the new region
     self.box[self.r][self.c] = self.region
     return (self.region, vx.r)
+
+  def pathFix(self, r0, c0, r1, c1, region, cls):
+    """Your optimism was unfounded. Update the boxes
+       along the path from [r0, c0] to [r1, c1] with 
+       the correct region 'region'. Remove the entry
+       from the polygon database and revert the region
+       number.
+    """
+    v = vx.r  # you went right in this case at [r0, c0]
+
+    r, c = r0, c0  # start of path
+    self.stampBox(r, c, v, region) # fix boxRegion()
+
+    r, c = self.move(r, c, v)  # move in direction v
+    v0 = v                     # save the previous direction
+
+    if not self.isInOut(True, r, c, v, cls):
+      v = self.cw[v]           # Inside is cw from [r, c] 
+    else:
+      if self.isInOut(False, r, c, v, cls):
+        v = self.ccw[v]        # Outside is ccw from [r, c] 
+	# stamp the box -- forget about collisions
+	self.stampBox(r, c, v0, region)  
+          
+    if v != v0: # if you changed direction, output vertex
+      if self.args.verbosity >= 5:
+	print 'Turn (pre while): ([{0}, {1}], {2}, {3}, {4})'.format(r, c, 
+			                                         self.diag[v], 
+			                                         cls, region)
+    # mark the box inside in the direction v0 you came from [r,c]
+    # check this!!! v0 or v?
+    self.stampBox(r, c, v, region)
+
+    while r != r1 or c != c1:
+      r, c = self.move(r, c, v)  # move in direction v
+      v0 = v                     # save the previous direction
+      # define the next direction
+      if not self.isInOut(True, r, c, v, cls):
+        v = self.cw[v]           # cw from [r, c] if not annulus
+      else:
+        if self.isInOut(False, r, c, v, cls):
+          v = self.ccw[v]        # ccw from [r, c] if not annulus
+	  self.stampBox(r, c, v0, region)  
+
+      if v != v0:
+        if self.args.verbosity >= 5:
+	  print 'Turn (while): ([{0}, {1}], {2}, {3}, {4})'.format(
+			  r, c, self.diag[v], cls, region)
+      # mark the box inside in the direction v from [r,c]
+      self.stampBox(r, c, v, region)
+    
+    # clear the region 
+    # deleting the entry causes trouble. Better to
+    # leave the nullified entry in place and reset it
+    # to a known (invalid) value
+    self.polyDB.db[self.region] = [(-1,-1)] # make empty
+
 
 
   def traverse(self): 
@@ -625,7 +689,8 @@ class Dissolver(object):
 			  r, c, self.getInsideRegion(r, c, v0))
 	  print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
 			  r0, c0, r, c)
-	  exit(-2)
+	  self.pathFix(r0, c0, r, c, self.getInsideRegion(r, c, v0), cls)
+	  return
           
     if v != v0: # if you changed direction, output vertex
       if self.args.verbosity >= 5:
@@ -638,7 +703,8 @@ class Dissolver(object):
 			  r, c, self.getInsideRegion(r, c, v))
       print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
 			  r0, c0, r, c)
-      exit(-2)
+      self.pathFix(r0, c0, r, c, self.getInsideRegion(r, c, v), cls)
+      return
 
     while r != r0 or c != c0:
       r, c = self.move(r, c, v)  # move in direction v
@@ -658,7 +724,8 @@ class Dissolver(object):
 			  r, c, self.getInsideRegion(r, c, v0))
             print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
 			  r0, c0, r, c)
-	    exit(-3)
+            self.pathFix(r0, c0, r, c, self.getInsideRegion(r, c, v0), cls)
+	    return
 
       if v != v0:
         if self.args.verbosity >= 5:
@@ -670,7 +737,10 @@ class Dissolver(object):
 			  r, c, self.getInsideRegion(r, c, v))
         print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
 			  r0, c0, r, c)
-	exit(-4)
+        self.pathFix(r0, c0, r, c, self.getInsideRegion(r, c, v),cls)
+	return
+
+# Let us pray
 
   def isHole(self, r, c, region, r1, r2): 
     """Returns True iff [r, c] are the coordinates of a vertex (specifically, 
@@ -849,11 +919,11 @@ if __name__ == '__main__':
 	  for rr in xrange(max(0,r-2),min(dis.boxRows,r+5)):
 	    print "".join(str(dis.box[rr][cc]) for cc in 
 			       xrange(max(0,c-4),min(dis.boxRows,c+3)))
-	  if args.verbosity < 6:
-	    exit(0)  
 	  r1, c1 = polyList[0]
 	  if dis.isHole(r, c, region, r1, c1):
 	    print '[{0},{1}] is a hole of [{2},{3}]'.format(r, c, r1, c1)
+    if args.verbosity >= 7:
+      print dis.box
 
   if not args.quiet:
     pbar.finish()
