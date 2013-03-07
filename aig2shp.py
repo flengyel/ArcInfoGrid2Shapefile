@@ -377,35 +377,47 @@ class Dissolver(object):
       self.r, self.c = r,c
       self.i, self.j = self.box2pixel(r, c)
 
+  def getInsideRegion(self, r, c, v):
+    """Get the region of the box at vertex [r, c] clockwise 
+       from direction v"""
+    return (self.box[r+self.insideR[v]][c+self.insideC[v]])
+
   def markBox(self, r, c, v, region):
     """Mark the inside  box at vertex [r, c] in direction v. 
     """
     r0 = r + self.insideR[v]
     c0 = c + self.insideC[v]
-    if ((self.args.verbosity >= 6) or 
-         (self.args.verbosity >= 5 and region == 5)):
+
+    verbosity = self.args.verbosity
+    if ((verbosity >= 6) or (verbosity >= 5 and region == 5)):
       print 'Marking box [{0},{1}] at vertex [{2},{3}] in direction {4} region {5}'.format( r0, c0, r, c, self.diag[v],region )
       for rr in xrange(max(0,r0-5),min(self.boxRows,r0+6)):
         print "".join(str(dis.box[rr][cc]) for cc in 
 			xrange(max(0,c0-5),min(self.boxRows,c0+6)))
+
     reg = self.box[r0][c0]
-    if (self.args.verbosity >= 5 and reg != 0 and reg == region):
-       print 'Already marked box [{0},{1}] with region {2} -- should be the start.'.format(r0, c0, region)
+
+    if (verbosity >= 7 and reg != 0 and reg == region):
+      print 'INFO: Already marked box [{0},{1}] with region {2}.'.format(
+		         r0, c0, region)
 
     if (reg != 0 and reg != region):
-      # at this point you should return False and enter a path correction algorithm in 
-      # Traverse, that exits if this condition occurs.
-      k, l = self.box2pixel(r0, c0)
-      for i in xrange(max(0,k-2), min(self.hdr.nrows,k+3)):
-        print "".join(str(self.raster.grid[i][j])+' ' for j in
+      # return False and enter a pathFixup algorithm  
+      # Traverse, then exit if this condition occurs.
+      if (verbosity >= 6):
+        k, l = self.box2pixel(r0, c0)
+        for i in xrange(max(0,k-2), min(self.hdr.nrows,k+3)):
+          print "".join(str(self.raster.grid[i][j])+' ' for j in
 			xrange(max(0,l-2),min(self.hdr.ncols,l+3)))
-      print 'ERROR: markBox(vertex=[{0}, {1}], vector={2},region={3}) center [{4},{5}]'.format(r, c, self.diag[v], region, r0, c0)
-      raise ValueError, '[{0},{1}] = {2} instead of {3}'.format(r0, c0, 
-		                                         reg, region)
+	print 'COLLISION: markBox(vertex=[{0}, {1}], vector={2},region={3}) center [{4},{5}]'.format(r, c, self.diag[v], region, r0, c0)
+	print'COLLISION: [{0},{1}] should be {2} instead of {3}'.format(
+			      r0, c0, reg, region)
+      return False	# don't set the region! This is the stopping point
     self.box[r0][c0] = region
     # experimental: -- seems to work and speed up the program
     #if self.isSucc(r, c):
     #  self.advCrnt(r, c)
+    return True
 
   def isInOut(self, isIn, r, c, v, cls):
     """Returns True if the square clockwise (ccw if isIn is False) 
@@ -557,28 +569,40 @@ class Dissolver(object):
 
 
   def traverse(self): 
-    """Traverse and build polygons with rings.
-       The state is ([r, c], v, v0): the current vertex and the current and previous 
-       directions. The previous direction is needed to mark regions during a ccw turn.
+    """Traverse and build polygons with rings. The state is 
+       ([r, c], v, v0): the current vertex and the current and previous 
+       directions. The previous direction is needed to mark regions 
+       during a ccw turn.
+
+       The boxRegion() algorithm is optimistic and will sometimes identify
+       new regions that should be combined with previously defined regions.
+       The pathFix() algorithm will undo a misadventure of this kind. Also,
+       the boxRegion() algorithm will sometimes misidentify holes that 
+       are outside the associated region. The isHole() algorithm identifies
+       these by checking if the path coincides with the boundary (it will 
+       pass through the origin of the path). The alternative to optimistic 
+       traversal and marking is to completely identify a region.
     """	  
 
     # get the classification of the new box
     (region, v) = self.boxRegion()  # All boxes visited will be marked with region 
     if region < 0:
-      print 'FATAL ERROR: region is {0} < 0. Too many regions.'.format(region)
+      print 'FATAL ERROR: region # {0} < 0. Too many regions.'.format(region)
       exit(-1)
 
-    cls =  self.getCls(self.r, self.c)  # the class is needed to determine direction
+    # the class is needed to determine direction
+    cls =  self.getCls(self.r, self.c)  
 
     r = self.r-1
     c = self.c-1
 
-    if self.args.verbosity >= 5:
+    verbosity = self.args.verbosity
+    if verbosity >= 5:
       print 'Traverse box [{0},{1}], vertex [{2},{3}] vector {4} region {5} class {6}.'.format(
 	self.r, self.c, r, c, self.diag[v], region, cls)
 
     if v == vx.z:  # can't proceed
-      if self.args.verbosity >=7:
+      if verbosity >=7:
 	print 'Traverse box: exiting, cannot go right'
       return
 
@@ -595,16 +619,26 @@ class Dissolver(object):
     else:
       if self.isInOut(False, r, c, v, cls):
         v = self.ccw[v]        # Outside is ccw from [r, c] 
-	self.markBox(r, c, v0, region)  # mark the inside box and outside
-
-
+	# mark box -- keep track of collisions
+	if not self.markBox(r, c, v0, region):  
+	  print 'Mark box:collision at [{0},{1}] should be {2}'.format(
+			  r, c, self.getInsideRegion(r, c, v0))
+	  print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
+			  r0, c0, r, c)
+	  exit(-2)
+          
     if v != v0: # if you changed direction, output vertex
       if self.args.verbosity >= 5:
 	print 'Turn (pre while): ([{0}, {1}], {2}, {3}, {4})'.format(r, c, 
 			                                         self.diag[v], 
 			                                         cls, region)
     # mark the box inside in the direction v0 you came from [r,c]
-    self.markBox(r, c, v, region) 
+    if not self.markBox(r, c, v, region):
+      print 'Mark box:collision at [{0},{1}] should be {2}'.format(
+			  r, c, self.getInsideRegion(r, c, v))
+      print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
+			  r0, c0, r, c)
+      exit(-2)
 
     while r != r0 or c != c0:
       r, c = self.move(r, c, v)  # move in direction v
@@ -619,35 +653,46 @@ class Dissolver(object):
 	  if verbosity >= 6 or (verbosity >= 5 and region == 5):
 	    print 'While: going ccw from {0} to {1}'.format(
 			    self.diag[v0], self.diag[v])
-	  self.markBox(r, c, v0, region)  # mark the inside box and outside
+	  if not self.markBox(r, c, v0, region):  
+            print 'Mark box: ccw collision at [{0},{1}] should be {2}'.format(
+			  r, c, self.getInsideRegion(r, c, v0))
+            print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
+			  r0, c0, r, c)
+	    exit(-3)
 
       if v != v0:
         if self.args.verbosity >= 5:
 	  print 'Turn (while): ([{0}, {1}], {2}, {3}, {4})'.format(
 			  r, c, self.diag[v], cls, region)
       # mark the box inside in the direction v from [r,c]
-      self.markBox(r, c, v, region)
+      if not self.markBox(r, c, v, region):
+        print 'Mark box: cw/0 collision at [{0},{1}] should be {2}'.format(
+			  r, c, self.getInsideRegion(r, c, v))
+        print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
+			  r0, c0, r, c)
+	exit(-4)
 
   def isHole(self, r, c, region, r1, r2): 
-    """Returns True iff [r, c] are the coordinates of a vertex (specifically, the
-       upper right vertex of the upper left most pixel) of an inner ring of the
-       region r. Traverse hole counterclockwise, using the potential hole list from 
-       the first pass.  The state is ([r, c], v, v0): the current vertex and the 
-       current and previous directions. The previous direction is used to verify 
-       regions during a ccw turn.
+    """Returns True iff [r, c] are the coordinates of a vertex (specifically, 
+       the upper right vertex of the upper left most pixel) of an inner ring 
+       of the region r. Traverse hole counterclockwise, using the potential 
+       hole list from the first pass.  The state is ([r, c], v, v0): the 
+       current vertex and the current and previous directions. The previous 
+       direction is used to verify regions during a ccw turn.
 
-       By moving counterclockwise, the same traversal algorithm as traverse() above
-       will traverse a "hole". This time a check needs to be performed at each
-       counterclockwise turn. Checks for the region are unnecessary when going "straight"
-       or clockwise, since the isInOutReg() predicates have checked the region number.
-       The starting configuration is the upper right vertex [r, c] of the upper rightmost
-       pixel of a potential hole, in which the top, diagonally upper left and left
-       pixels all have the same region R.
+       By moving counterclockwise, the same traversal algorithm as traverse() 
+       above will traverse a "hole". This time a check needs to be performed 
+       at each counterclockwise turn. Checks for the region are unnecessary 
+       when going "straight" or clockwise, since the isInOutReg() predicates 
+       have checked the region number.  The starting configuration is the 
+       upper right vertex [r, c] of the upper rightmost pixel of a potential 
+       hole, in which the top, diagonally upper left and left pixels all have 
+       the same region R.
 
-       A gotcha: traversal of a potential hole could lead you outside the region. 
-       This happens if you move to the coordinates of any vertex of the bounding polygon.
-       Since the polygon database maintains the start vertex of the region, this
-       can be checked.
+       A gotcha: traversal of a potential hole could lead you outside the 
+       region.  This happens if you move to the coordinates of any vertex 
+       of the bounding polygon.  Since the polygon database maintains the 
+       start vertex of the region, this can be checked.
 
        R   R  [r, c]
        R   *
