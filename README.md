@@ -1,10 +1,17 @@
 aig2shp.py: ArcInfo Grid ASCII to ESRI Shapefile conversion
 =====================
 Vectorization of ArcInfo Grid ASCII files as ESRI Shapefiles. 
-Python program to convert an ArcInfo Grid ASCII raster file to an ESRI shapefile with 
-a single layer containing oriented grid square polygons centered at the pixels 
-of the grid, each containing an attribute value equal to the value of the corresponding 
-ArcInfo raster pixel. The ArcInfo Grid ASCII header <code>cellsize</code> parameter
+Python program to convert an ArcInfo Grid ASCII raster file to an ESRI 
+shapefile in one of two formats: 
+
+# with a single layer containing oriented grid square polygons centered at the pixels of the grid; and
+# with a single layer containing "dissolved" polygons. The dissolve is performed
+in the (row, column) coordinates of the raster space. 
+
+
+Each polygon contains an attribute value equal to the value of the corresponding ArcInfo raster pixel. 
+
+The ArcInfo Grid ASCII header <code>cellsize</code> parameter
 determines the size of the grid squares. 
 
 In contrast to the [ArcGIS Raster to Polygon](http://help.arcgis.com/en/arcgisdesktop/10.0/help/index.html#//001200000008000000) and the [gdal_polygonize.py](http://www.gdal.org/gdal_polygonize.html) 
@@ -12,7 +19,7 @@ raster to polygon feature layer conversion utilities, <code>aig2shp.py</code> do
 float raster values to be discretized into (nonnegative) integer values before conversion.  Your 
 raster data is preserved, which may have some advantages for geospatial analysis.  Nevertheless,
 the vector files are large, so `arcinfo.py` is available to reclassify ArcInfo Grid ASCII raster
-files. (More on this to come.)
+files. 
 
 
 The program was written to upload raster data in a format useable by 
@@ -29,13 +36,13 @@ ArcInfo Grid ASCII files, and by examination of converted files within GIS syste
 <code>(row, col)</code> are given by <code>(x, y) = (xllcorner + (col + 1/2) * cellsize, yllcorner + (nrows - row - 1/2) * cellsize)</code>.
 
     
-## Usage ##
+## aig2shp.py Usage ##
 ```
 usage: aig2shp.py [-h] [-a attribute] [-d] [-e minX minY maxX maxY] [-l LAYER]
-                  [-m MULTIPLIER] [-n] [-q] [-v] [--version] [--wgs84]
+                  [-n] [-O] [-q] [-v] [--version] [--wgs84]
                   grid_ASCII_file ESRI_shapefile
 
-Create ESRI Shapefile grid poly coverage from ArcInfo Grid ASCII raster.
+Create ESRI Shapefile from ArcInfo Grid ASCII raster.
 
 positional arguments:
   grid_ASCII_file       ArcInfo Grid ASCII input file.
@@ -46,20 +53,19 @@ optional arguments:
   -a attribute, --attr attribute
                         Name of attribute for ArcInfo grid values. Defaults to
                         "value."
-  -d, --dissolve        Dissolve Arc Info ASCII Grid in (row, col) space
-                        before converting to shapefile.
+  -d, --dissolve        Dissolve ArcInfo ASCII Grid in raster space before
+                        converting to shapefile. Saves space, usually.
   -e minX minY maxX maxY, --extent minX minY maxX maxY
                         Bounding box of subset of raster in geographic
                         coordinates.
   -l LAYER, --layer LAYER
-                        Shapefile layer name string.
-  -m MULTIPLIER, --multiplier MULTIPLIER
-                        Multiply attribute column by the multiplier and take
-                        integer part. Useful in conjunction with QGIS
-                        dissolve.
+                        Shapefile layer name string. Default is grid_value.
   -n, --nonzero         Exclude zero values.
+  -O, --opt             Enable greedy cell marking optimization.
   -q, --quiet           Suppress progress bar.
-  -v, --verbose         Display verbose output.
+  -v, --verbosity       Display verbose message output. Each additional 'v'
+                        increases message verbosity: -vv is very verbose, and
+                        -vvv is very very verbose.
   --version             Show program version number and exit.
   --wgs84               Set spatial reference to WGS84/EPSG:4326 in shapefile
                         layer. Projection file (.prj) is written out.
@@ -79,10 +85,12 @@ to produce a corresponding shapefile.
 The shapefile was uploaded to CartoDB; a screenshot is shown below.
 [<img src="https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCropland.png">](https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCropland.png)
 
+The example produces a vector grid square for each 5 minute pixel.
 ## Dependencies ##
 * [ProgressBar](http://code.google.com/p/python-progressbar/)
 * [GDAL 1.9.1](http://pypi.python.org/pypi/GDAL/) GDAL Python bindings
 * numpy 1.0.0 or greater
+* scipy (for arcinfo.py)
 * argparse
 
 ## Author ##

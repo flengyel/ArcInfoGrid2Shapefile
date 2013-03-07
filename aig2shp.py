@@ -20,7 +20,7 @@ import argparse as arg
 from progressbar import ProgressBar, Percentage, Bar
 
 # Define the arguments first
-descript = "Create ESRI Shapefile grid poly coverage from ArcInfo Grid ASCII raster."
+descript = "Create ESRI Shapefile from ArcInfo Grid ASCII raster."
 epistr   = "Software is released under The MIT License (c) 2013 Florian Lengyel, CUNY Environmental CrossRoads Initiative, Advanced Science Research Center, The City College of New York. Contact: gmail/skype/twitter florianlengyel."
 parser  = arg.ArgumentParser( description = descript, epilog=epistr )
 # value of dest derived from first long opt
@@ -30,7 +30,7 @@ parser.add_argument('-a', '--attr',
 		    help='Name of attribute for ArcInfo grid values. Defaults to "value."')
 parser.add_argument('-d', '--dissolve',
 		    action='store_true',
-		    help='Dissolve Arc Info ASCII Grid in (row, col) space before converting to shapefile.')
+		    help='Dissolve ArcInfo ASCII Grid in raster space before converting to shapefile.')
 parser.add_argument('-e', '--extent', 
 		    nargs=4, 
 		    type=float,
@@ -38,10 +38,7 @@ parser.add_argument('-e', '--extent',
 		    help='Bounding box of subset of raster in geographic coordinates.')
 parser.add_argument('-l', '--layer', 
                     default='grid_value',
-                    help='Shapefile layer name string.')
-parser.add_argument('-m', '--multiplier',
-		    type=int,
-		    help='Multiply attribute column by the multiplier and take integer part. Useful in conjunction with QGIS dissolve.')
+                    help='Shapefile layer name string. Default is grid_value.')
 parser.add_argument('-n', '--nonzero', 
 		    action="store_true",
 		    help='Exclude zero values.')
@@ -56,7 +53,7 @@ parser.add_argument('-v', '--verbosity',
 		    help="Display verbose message output. Each additional 'v' increases message verbosity: -vv is very verbose, and -vvv is very very verbose.")
 parser.add_argument('--version', 
 		    action='version', 
-		    version='%(prog)s 0.4',
+		    version='%(prog)s 0.5',
 		    help='Show program version number and exit.')
 parser.add_argument('--wgs84', 
 		    action="store_true", 
@@ -888,8 +885,6 @@ if __name__ == '__main__':
           if ext.compare(lat, lon):
             poly = hdr.createGridSquare(lat, lon)
             feature = ogr.Feature( layer.GetLayerDefn() )
-            if args.multiplier != None:
-	      v = int(v * args.multiplier)
             feature.SetField(args.attr, v)
             feature.SetGeometry(poly) # set the attribute
             if layer.CreateFeature(feature):
