@@ -684,23 +684,25 @@ class Dissolver(object):
         v = self.ccw[v]        # Outside is ccw from [r, c] 
 	# mark box -- keep track of collisions
 	if not self.markBox(r, c, v0, region):  
-	  print 'Mark box:collision at [{0},{1}] should be {2}'.format(
+          if verbosity >= 7:
+	    print 'Mark box:collision at [{0},{1}] should be {2}'.format(
 			  r, c, self.getInsideRegion(r, c, v0))
-	  print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
+	    print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
 			  r0, c0, r, c)
 	  self.pathFix(r0, c0, r, c, self.getInsideRegion(r, c, v0), cls)
 	  return
           
     if v != v0: # if you changed direction, output vertex
-      if self.args.verbosity >= 5:
+      if verbosity >= 5:
 	print 'Turn (pre while): ([{0}, {1}], {2}, {3}, {4})'.format(r, c, 
 			                                         self.diag[v], 
 			                                         cls, region)
     # mark the box inside in the direction v0 you came from [r,c]
     if not self.markBox(r, c, v, region):
-      print 'Mark box:collision at [{0},{1}] should be {2}'.format(
+      if verbosity >= 7:
+        print 'Mark box:collision at [{0},{1}] should be {2}'.format(
 			  r, c, self.getInsideRegion(r, c, v))
-      print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
+        print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
 			  r0, c0, r, c)
       self.pathFix(r0, c0, r, c, self.getInsideRegion(r, c, v), cls)
       return
@@ -715,13 +717,14 @@ class Dissolver(object):
         if self.isInOut(False, r, c, v, cls):
           v = self.ccw[v]        # ccw from [r, c] if not annulus
 	  verbosity = self.args.verbosity
-	  if verbosity >= 6 or (verbosity >= 5 and region == 5):
+	  if verbosity >= 6:
 	    print 'While: going ccw from {0} to {1}'.format(
 			    self.diag[v0], self.diag[v])
 	  if not self.markBox(r, c, v0, region):  
-            print 'Mark box: ccw collision at [{0},{1}] should be {2}'.format(
+	    if verbosity >= 7:
+              print 'Mark box: ccw collision at [{0},{1}] should be {2}'.format(
 			  r, c, self.getInsideRegion(r, c, v0))
-            print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
+              print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
 			  r0, c0, r, c)
             self.pathFix(r0, c0, r, c, self.getInsideRegion(r, c, v0), cls)
 	    return
@@ -732,9 +735,10 @@ class Dissolver(object):
 			  r, c, self.diag[v], cls, region)
       # mark the box inside in the direction v from [r,c]
       if not self.markBox(r, c, v, region):
-        print 'Mark box: cw/0 collision at [{0},{1}] should be {2}'.format(
+	if verbosity >= 7:
+          print 'Mark box: cw/0 collision at [{0},{1}] should be {2}'.format(
 			  r, c, self.getInsideRegion(r, c, v))
-        print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
+          print 'Fixup path from [{0},{1}] to [{2},{3}]'.format(
 			  r0, c0, r, c)
         self.pathFix(r0, c0, r, c, self.getInsideRegion(r, c, v),cls)
 	return
@@ -976,7 +980,6 @@ if __name__ == '__main__':
       r0, c0 = polyList[0]  # obtain start coordinates of polygon
 
       if r0 == -1 and c0 == -1:
-        print 'Ignoring region'
         continue  # ignore bad region
       
       if verbosity >= 6:
