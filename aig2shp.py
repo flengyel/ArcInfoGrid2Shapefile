@@ -571,6 +571,8 @@ class Dissolver(object):
     self.box[self.r][self.c] = self.region
     return (self.region, vx.r)
 
+
+
   def pathFix(self, r0, c0, r1, c1, region, cls):
     """Your optimism was unfounded. Update the boxes
        along the path from [r0, c0] to [r1, c1] with 
@@ -739,7 +741,7 @@ class Dissolver(object):
 
 # Let us pray
 
-  def isHole(self, r, c, region, r1, r2): 
+  def isHole(self, r, c, region, r1, c1): 
     """Returns True iff [r, c] are the coordinates of a vertex (specifically, 
        the upper right vertex of the upper left most pixel) of an inner ring 
        of the region r. Traverse hole counterclockwise, using the potential 
@@ -787,8 +789,8 @@ class Dissolver(object):
 
     if v != v0: # if you changed direction, output vertex
       if self.args.verbosity >= 4:
-	print 'isHole: Changed direction: ([{0}, {1}], {2}, {3})'.format(r, c, self.diag[v], 
-			                                                 region)
+	print 'isHole: Changed direction: ([{0}, {1}], {2}, {3})'.format(
+                                                 r, c, self.diag[v], region )
     while r != r0 or c != c0:
       r, c = self.move(r, c, v)  # move in direction v
       if r == r1 and c == c1:    # outside since you passed through [r1, c1]
@@ -808,10 +810,66 @@ class Dissolver(object):
 
       if v != v0:
         if self.args.verbosity >= 4:
-	  print 'isHole: Changed direction: ([{0}, {1}], {2}, {3})'.format(r, c, self.diag[v], 
-			                                           region)
+	  print 'isHole: Changed direction: ([{0}, {1}], {2}, {3})'.format(
+                                r, c, self.diag[v], region)
     # you made it!	  
     return True	  
+
+  def box2geo(self, r, c):
+    """Convert vertex at [r, c] to geographic coordinates (x, y) = (lon, lat). 
+       Assumes that r and c are both even--which is true for vertices of boxes."""
+    return ( self.hdr.xll + self.hdr.cell * (c >> 1),
+             self.hdr.yll + self.hdr.cell * (self.hdr.nrows - (r >> 1)) )
+
+
+  def addRing(self, poly, region, r0, c0, v):
+    """Add ring with starting coordinates [r0, c0] to polygon poly.
+       Traverse in the direction v. (This cries out for a general traversal 
+       class.)"""
+    
+    if self.args.verbosity >= 5:
+      print 'AddRing'
+
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+
+    # add the origin
+    lon, lat = self.box2geo(r0, c0)
+    ring.AddPoint(lon, lat)    # note reversal
+
+    r, c = r0, c0  # start of path
+    v0 = v                     # save the previous direction
+
+    r, c = self.move(r, c, v)  # move in direction v
+
+    if not self.isInOutReg(True, r, c, v, region):
+      v = self.cw[v]           # Inside is cw from [r, c] 
+    else:
+      if self.isInOutReg(False, r, c, v, region):
+        v = self.ccw[v]        # Outside is ccw from [r, c] 
+          
+    if v != v0: # if you changed direction, output vertex
+      lon, lat = self.box2geo(r, c)
+      ring.AddPoint(lon, lat)    # note reversal
+
+    while r != r0 or c != c0:
+      r, c = self.move(r, c, v)  # move in direction v
+      v0 = v                     # save the previous direction
+      # define the next direction
+      if not self.isInOutReg(True, r, c, v, region):
+        v = self.cw[v]           # cw from [r, c] if not annulus
+      else:
+        if self.isInOutReg(False, r, c, v, region):
+          v = self.ccw[v]        # ccw from [r, c] if not annulus
+
+      if v != v0:
+        lon, lat = self.box2geo(r, c)
+        ring.AddPoint(lon, lat)    # note reversal
+
+    ring.CloseRings()
+    # Add the ring to the polygon
+    poly.AddGeometry( ring )
+
+
 
 class Raster(object):
   """Raster objects hold the grid of pixes, which can be passed to Dissolve objects
@@ -835,11 +893,13 @@ class Raster(object):
       print "Reshaping array to grid..."
     self.grid = np.reshape( grid1D, (hdr.nrows, hdr.ncols) )
 
+
 if __name__ == '__main__':  
   args = parser.parse_args()  # parse command line arguments
   hdr = ArcInfoGridASCII(args)
   ext = ExtentHandler(hdr, args)
   raster = Raster(args, hdr)
+  verbosity = args.verbosity
 
 
   # create the shapefile
@@ -870,13 +930,13 @@ if __name__ == '__main__':
   if layer.CreateField ( fieldef ) != 0:
     raise ValueError, "OGR field definition failed."
 
-  if args.verbosity >= 1:
+  if verbosity >= 1:
     print 'Converting to shapefile...'
 
-  if not args.quiet: # show the progress bar unless instructed otherwise
-    pbar = ProgressBar(widgets=[Percentage(), Bar()], maxval = hdr.nrows).start()
 
   if not args.dissolve:
+    if not args.quiet: # show the progress bar unless instructed otherwise
+      pbar = ProgressBar(widgets=[Percentage(), Bar()], maxval = hdr.nrows).start()
     for row  in range(0, hdr.nrows):
       for col in range(0, hdr.ncols):
         v = raster.grid[row][col]
@@ -892,36 +952,77 @@ if __name__ == '__main__':
             feature.Destroy()
       if not args.quiet:
         pbar.update(row+1)
+    if not args.quiet:
+      pbar.finish()
   else:
-    polyDB = PolygonDB(args)
+    polyDB = PolygonDB(args) # create empty polygon database
+
+    # create a polygon dissolver
     dis = Dissolver(args, hdr, ext, raster, polyDB) 
-    if args.verbosity >= 6:
+
+    if verbosity >= 6:
       print raster.grid
+
+    # this is the dissolve algorithm
     while dis.nextValid(): # find the next valid box in raster/box coordinates
       dis.traverse() # traverse boundary
-      if args.verbosity >= 7:
+
+      if verbosity >= 7:
         print dis.box
 
     # dump the polygons
     for region in polyDB.db:
       polyList = polyDB.db[region]
-      print 'region {0} start {1} holes {2}'.format(region, polyList[0], polyList[1:])
-      if dis.region2class[region] == hdr.nodata:
-	print 'NODATA region'
+      r0, c0 = polyList[0]  # obtain start coordinates of polygon
+
+      if r0 == -1 and c0 == -1:
+        print 'Ignoring region'
+        continue  # ignore bad region
+      
+      if verbosity >= 6:
+        print 'region {0} start {1} holes {2}'.format(
+                                    region, polyList[0], polyList[1:])
+
+      # otherwise obtain the class (bin number) of the region
+      cls = dis.region2class[region]
+
+      # ignore nodata polygons for now
+      if cls == hdr.nodata:
+        if verbosity >= 6:
+	  print 'NODATA region'
       else:
+        # create the polygon
+        # first poly
+        poly = ogr.Geometry(ogr.wkbPolygon)
+
+        # add the outer clockwise ring starting at [r1, c1]
+        dis.addRing(poly, region, r0, c0, vx.r)
+
         for vertex in polyList[1:]:
 	  r, c = vertex
-	  for rr in xrange(max(0,r-2),min(dis.boxRows,r+5)):
-	    print "".join(str(dis.box[rr][cc]) for cc in 
+
+          if verbosity >= 6:
+	    for rr in xrange(max(0,r-2),min(dis.boxRows,r+5)):
+	      print "".join(str(dis.box[rr][cc]) for cc in 
 			       xrange(max(0,c-4),min(dis.boxRows,c+3)))
-	  r1, c1 = polyList[0]
-	  if dis.isHole(r, c, region, r1, c1):
-	    print '[{0},{1}] is a hole of [{2},{3}]'.format(r, c, r1, c1)
+
+	  if dis.isHole(r, c, region, r0, c0):
+            if verbosity >= 6:
+	      print '[{0},{1}] is a hole of [{2},{3}]'.format( r, c, r1, c1 )
+
+            # add inner counterclockwise ring at [r, c]
+            dis.addRing(poly, region, r, c, vx.l)
+      
+        # add the class as an attribute
+        feature = ogr.Feature( layer.GetLayerDefn() )
+        feature.SetField(args.attr, cls)
+        feature.SetGeometry( poly ) # set the attribute
+        if layer.CreateFeature( feature ):
+          raise ValueError, "Could not create feature in shapefile."
+        feature.Destroy()
+
     if args.verbosity >= 7:
       print dis.box
 
-  if not args.quiet:
-    pbar.finish()
-
+  # write out the shapefile
   ds.Destroy()
-
