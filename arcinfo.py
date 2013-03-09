@@ -68,7 +68,7 @@ class ArcInfoGridASCII(object):
     """Write field to file as text"""
     fd.write('{0:<14}{1!s}\n'.format(fieldname, val))
 
-  def writeReclass(self, args, raster, endpoints):
+  def writeReclass(self, args, ext, raster, endpoints):
     """Write the reclassified file"""	    
     with open(args.outfile, 'w') as fd:
       # Write header
@@ -79,10 +79,14 @@ class ArcInfoGridASCII(object):
       self.putField(fd, 'cellsize', self.cell)
       self.putField(fd, 'NODATA_value', int(self.nodata)) # must be int
       # Write reclassified data based on endpoints
-      for row  in range(0, hdr.nrows):
-        for col in range(0, hdr.ncols):
+      for row  in range(0, self.nrows):
+        for col in range(0, self.ncols):
           v = raster.grid[row][col]
-          if v != hdr.nodata:
+	  if args.extent != None:
+	    lon, lat = self.cart2geo(row, col)
+	    if not ext.compare(lon, lat):
+	      v = self.nodata
+          if v != self.nodata:
 	    if args.scaling > 1:
 	      v = int(v * args.scaling)
             cat = np.searchsorted(endpoints, v, side='right')
@@ -116,12 +120,6 @@ class ArcInfoGridASCII(object):
     minY = lat - self.mid
     maxY = lat + self.mid
 
-    #you may need to project coordinates
-    #if args.wgs84:
-    # we might want to project to WGS84
-    #wgs84 = proj.Proj("+init=EPSG:4326") #LatLon with WGS84 datum used by Google
-    #This seems unnecessary -- although this is probably because the grid files
-    #I have been using were already in EPSG:4326.
     
     # ESRI shapefiles store points in lat/lon order, whereas ArcInfo Grid ASCII
     # files store points in lon/lat order.
@@ -142,7 +140,7 @@ class ArcInfoGridASCII(object):
 class ExtentHandler(object):
   """Handle bounding boxes within ArcInfo Grid ASCII extents. Sets comparison
      function depending on arguments supplied to command line"""
-  def __True__(self, lat, lon):  # use this comparison when -e, --extent is absent
+  def __True__(self, lon, lat):  # use this comparison when -e, --extent is absent
      return True
 
   def __cmpFun__(self, lon, lat):
@@ -181,8 +179,8 @@ class ExtentHandler(object):
       # our exacting standards have been met
       self.cmpFun = self.__cmpFun__
 
-  def compare(self, lat, lon):
-    return self.cmpFun(lat, lon)
+  def compare(self, lon, lat):
+    return self.cmpFun(lon, lat)
 
 if __name__ == '__main__':
   from progressbar import ProgressBar, Percentage, Bar
@@ -254,7 +252,7 @@ if __name__ == '__main__':
 
   args = parser.parse_args()  # parse command line arguments
   hdr = ArcInfoGridASCII(args)
-  #  ext = ExtentHandler(hdr, args)
+  ext = ExtentHandler(hdr, args)
   raster = Raster(args, hdr)
 
   if not args.quiet: # show the progress bar unless instructed otherwise
@@ -265,6 +263,10 @@ if __name__ == '__main__':
   for row  in range(0, hdr.nrows):
     for col in range(0, hdr.ncols):
       v = raster.grid[row][col]
+      if args.extent != None:
+        lon, lat = hdr.cart2geo(row, col)
+	if not ext.compare(lon, lat):
+          v = hdr.nodata # act as if nodata
       if v != hdr.nodata:
 	if args.scaling > 1:
 	  v = int(v * args.scaling)
@@ -275,9 +277,9 @@ if __name__ == '__main__':
   x = np.array(a) # make numpy array
   x.sort()
 
+  endpoints = []
   if args.reclass[0] == 'eq':
     # get quantiles.
-    endpoints = []
     for i in range(1, args.bins):
       endpoints.append(stats.scoreatpercentile(x, i * int(100/args.bins))) 
     endpoints.append(stats.scoreatpercentile(x, 100))
@@ -289,7 +291,7 @@ if __name__ == '__main__':
     print endpoints
     exit(0)
 
-  hdr.writeReclass(args, raster, endpoints)
+  hdr.writeReclass(args, ext, raster, endpoints)
 
   if not args.quiet:
     pbar.finish()

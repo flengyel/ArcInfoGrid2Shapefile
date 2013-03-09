@@ -28,12 +28,19 @@ The program was written to upload raster data in a format useable by
 The following was determined from ESRI documentation of ArcInfo Grid ASCII files online, and 
 was verified by examination of the output of the <code>gdalinfo</code> GDAL utility applied to 
 ArcInfo Grid ASCII files, and by examination of converted files within GIS systems.
-* The ArcInfo Grid ASCII raster format stores values in Lon, Lat <code>(x, y)</code> order, but the ESRI shapefile format stores coordinates in Lat, Lon <code>(y, x)</code> order. 
 * The origin of the raster is defined to be the <code>(x, y)</code> coordinates of the upper-left corner of the upper left grid square of size <code>cellsize</code>, namely <code>(x0, y0) = (xllcorner, yllcorner + nrows * cellsize)</code>. 
 * The coordinates of the center of the grid square at the origin are then <code>(x0 + cellsize/2, y0 - cellsize/2)</code>. 
 * In general, the geographic coordinates <code>(x, y)</code> of the pixel at 
 <code>(row, col)</code> are given by <code>(x, y) = (xllcorner + (col + 1/2) * cellsize, yllcorner + (nrows - row - 1/2) * cellsize)</code>.
 
+The dissolve operation embeds the pixel matrix into a _box space_ with
+additional coordinates for the vertices of the grid squares centered
+at each pixel. The coordinates of a point in box space are denoted [r,c]. 
+The change of coordinates is given by [r, c] = [2i+1, 2j+1], where (i, j) 
+are the coordinates of the pixel at row i, column j in raster space. The four
+corners of the box corresponding to the pixel (i, j) are
+[2i, 2j] (upper left), [2i, 2j+2] (upper right), [2i+2, 2j] (lower left)
+and [2i+2, 2j+2] (lower right).
     
 ## aig2shp.py Usage ##
 ```

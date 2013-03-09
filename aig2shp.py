@@ -137,26 +137,18 @@ class ArcInfoGridASCII(object):
     maxX = lon + self.mid
     minY = lat - self.mid
     maxY = lat + self.mid
-
-    #you may need to project coordinates
-    #if args.wgs84:
-    # we might want to project to WGS84
-    #wgs84 = proj.Proj("+init=EPSG:4326") #LatLon with WGS84 datum used by Google
-    #This seems unnecessary -- although this is probably because the grid files
-    #I have been using were already in EPSG:4326.
     
-    # ESRI shapefiles store points in lat/lon order, whereas ArcInfo Grid ASCII
-    # files store points in lon/lat order.
-    ring.AddPoint(minY, minX)
-    ring.AddPoint(maxY, minX)
-    ring.AddPoint(maxY, maxX)
-    ring.AddPoint(minY, maxX)
-    ring.AddPoint(minY, minX) # close the ring
+    ring.AddPoint(minX, minY)
+    ring.AddPoint(minX, maxY)
+    ring.AddPoint(maxX, maxY)
+    ring.AddPoint(maxX, minY)
+    ring.AddPoint(minX, minY) # close the ring
     poly = ogr.Geometry(ogr.wkbPolygon) # create a new polygon
     poly.AddGeometry(ring) # add ring to polygon
     # add the attribute to the polygon
     return poly
     
+
 class ExtentHandler(object):
   """Handle bounding boxes within ArcInfo Grid ASCII extents. Sets comparison
      function depending on arguments supplied to command line"""
@@ -199,9 +191,8 @@ class ExtentHandler(object):
       # our exacting standards have been met
       self.cmpFun = self.__cmpFun__
 
-  def compare(self, lat, lon):
-    return self.cmpFun(lat, lon)
-
+  def compare(self, lon, lat):
+    return self.cmpFun(lon, lat)
 
 # a StackExchange creation
 def enum(**enums):
@@ -273,7 +264,9 @@ class Dissolver(object):
     self.boxRows  = 2*hdr.nrows + 1
     self.boxCols  = 2*hdr.ncols + 1
 
-    self.box   = np.zeros(shape = (self.boxRows, self.boxCols), dtype = np.int16) 
+    # use 32 bit integers 
+    self.box   = np.zeros(shape = (self.boxRows, self.boxCols), 
+		    dtype = np.int32) 
 
     self.i =  0  # CAUTION: the nextValid() function starts from (i,j+1)
     self.j = -1  # and must be called to set the current valid pixel
@@ -303,10 +296,10 @@ class Dissolver(object):
     # This is precisely the behavior one wants. The upper left hand corner is
     # in region 1, by definition. All other region numbers are defined as
     # the program runs.
-    self.region2class = { 0 : np.nan }  # the outside region
+    self.region2class = { 0L : np.nan }  # the outside region
 
     # Global locally simply connected region number
-    self.region = 0  # The box at [r,c] is marked by the region number    
+    self.region = 0L  # The box at [r,c] is marked by the region number    
 
   def move(self, r, c, v):
     """recompute box coordinates using the mov enum"""
@@ -413,8 +406,6 @@ class Dissolver(object):
 			      r0, c0, reg, region)
       return False	# don't set the region! This is the stopping point
     self.box[r0][c0] = region
-    # experimental: -- seems to work and speed up the program
-    
     # This seems to add nothing in practice
     #if self.args.opt and self.isSucc(r, c):
     #  print 'optimize!'
@@ -554,9 +545,18 @@ class Dissolver(object):
 
     # my class differs from the top region  
 
-    if myCls == self.region2class[leftRegion]:
-      self.box[self.r][self.c] = leftRegion
-      return (leftRegion, vx.r)
+    try:
+      if myCls == self.region2class[leftRegion]:
+        self.box[self.r][self.c] = leftRegion
+        return (leftRegion, vx.r)
+
+    except KeyError:
+      print 'EXCEPTION: box[{0}][{1}] topRegion {2} top box [{3},{4}] not in map, myCls {5}'.format( self.r, self.c, topRegion, rTop, cTop, myCls)
+      print 'self.box[{0}][{1}] = {2} next available region {3}'.format(
+		      rTop,cTop,self.box[rTop][cTop], self.region)
+      print self.region2class
+      exit(-3)
+
 
     # my class starts a new region -- this could join with others.
     self.region += 1
@@ -623,11 +623,13 @@ class Dissolver(object):
       # mark the box inside in the direction v from [r,c]
       self.stampBox(r, c, v, region)
     
-    # clear the region 
-    # deleting the entry causes trouble. Better to
-    # leave the nullified entry in place and reset it
-    # to a known (invalid) value
+    # Reset the region number -- this should be
+    # handled as a "region number service."
+    # Set the polygon to an invalid entry
     self.polyDB.db[self.region] = [(-1,-1)] # make empty
+    # del self.polyDB.db[self.region]
+    self.region -= 1
+
 
 
 
@@ -946,8 +948,8 @@ if __name__ == '__main__':
         v = raster.grid[row][col]
         if v != hdr.nodata and (not args.nonzero or v != 0):
           lon, lat = hdr.cart2geo(row, col) # Note reversal!
-          if ext.compare(lat, lon):
-            poly = hdr.createGridSquare(lat, lon)
+          if ext.compare(lon, lat):
+            poly = hdr.createGridSquare(lon, lat)
             feature = ogr.Feature( layer.GetLayerDefn() )
             feature.SetField(args.attr, v)
             feature.SetGeometry(poly) # set the attribute
