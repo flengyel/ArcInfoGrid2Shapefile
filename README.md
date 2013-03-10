@@ -36,13 +36,29 @@ ArcInfo Grid ASCII files, and by examination of converted files within GIS syste
 The dissolve operation embeds the pixel matrix into a _box space_ with
 additional coordinates for the vertices of the grid squares centered
 at each pixel. The coordinates of a point in box space are denoted [r,c]. 
-The change of coordinates is given by [r, c] = [2i+1, 2j+1], where (i, j) 
-are the coordinates of the pixel at row i, column j in raster space. The four
-corners of the box corresponding to the pixel (i, j) are
-[2i, 2j] (upper left), [2i, 2j+2] (upper right), [2i+2, 2j] (lower left)
-and [2i+2, 2j+2] (lower right).
+The change of coordinates is given by 
+```
+[r, c] = [2i+1, 2j+1], 
+```
+where (i, j) are the coordinates of the pixel at row i, column j in raster space. 
+The four corners and edge coordinates of the box corresponding to the pixel (i, j) are
+shown below. The directions shown are clockwise traversal directions at each vertex.
+```
+ UL→   Top   UR↓       [r-1,c-1]  [r-1,c] [r-1,c+1]
+ Left  [r,c] Right     [r,c-1]    [r,c]   [r,c+1]
+ LL↑   Bot   LR←       [r+1,c-1]  [r+1,c] [r+1,c+1]
+```
+The edges, denoted Top, Right, Bot and Left, aren't used (4/9ths wasted). The
+geographic coordinates of the vertex at [r,c] are given by
+```
+(x, y) = (xllcorner + cellsize * (c / 2 ), yllcorner + cellsize * (nrows - (r / 2)) 
+```
+An advantage of computation in box space is that vertices have even coordinates,
+so division by 2 can be done by right shifting. The conversion to geographic
+coordinates is postponed until the shapefile is written.
+
     
-## aig2shp.py Usage ##
+## aig2shp.py usage ##
 ```
 usage: aig2shp.py [-h] [-a attribute] [-d] [-e minX minY maxX maxY] [-l LAYER]
                   [-n] [-O] [-q] [-v] [--version] [--wgs84]
