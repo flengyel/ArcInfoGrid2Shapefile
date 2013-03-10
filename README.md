@@ -123,16 +123,16 @@ There are several opportunities for functional and object-oriented improvements.
 * Box coordinates can be handled through an interface. The box coordinate [r,c] 
 is valid if and only if r+c is even. The point [r,c] is a vertex if and only if
 r and c are even and a pixel (a region number) if and only if r and c are odd.
-The interface to the box space could be a class. The implementation need
-not be an matrix of size 2nrows+1 x 2ncols+1. The vertex set could be an array 
+The interface to the box space could be a class. The implementation need not be 
+an matrix of size (2*nrows+1)x(2*ncols+1). The vertex set could be an array 
 of size (nrows+1)x(ncols+1). The internal vertex coordinate  could be
-written {p, q}; the change of coordinates is given by [r, c] = {2p, 2q}. The 
+written {p, q}; the change of coordinates is given by [r,c] = {2p,2q}. The 
 Region numbers could be stored in a matrix of size nrows x ncols. The 
 mapping from internal coordinates to to external box centroid coordinates is 
-[r, c] = {2p+1, 2q+1}. The change of coordinates between pixel space (i, j)
+[r,c] = {2p+1,2q+1}. The change of coordinates between pixel space (i,j)
 coordinates and internal box centroid coordinates is the identity.
 
-* The internal box centroid coordinate space could be represented by 32-bit 
+* The internal box centroid could be represented by a matrix of 32-bit 
 integers. This is necessary because there can be hundreds of thousands or 
 millions of polygons in general, and there is a one-one correspondence
 between regions and polygon boundaries (but not holes). Sixteen-bit words are 
@@ -140,9 +140,9 @@ insufficient. However, the use of two arrays, one for vertex coordinates and
 one for centroid coordinates saves considerable space. Conceptually, such an 
 interface presents this pattern of coordinates:
 ```
- UL→       UR↓       [r-1,c-1]       [r-1,c+1]
-     [r,c]                     [r,c]          
- LL↑       LR←       [r+1,c-1]       [r+1,c+1]
+UL→     UR↓       [r-1,c-1]     [r-1,c+1]
+   [r,c]                   [r,c]
+LL↑     LR←       [r+1,c-1]     [r+1,c+1]
 ```
 Nothing more is needed. The box coordinate [r,c] automatically satisfies
 r+c = 0 mod 2. The internal representation is never manipulated directly--always
@@ -150,7 +150,8 @@ through a stylized interface.
 
 * The traversal algorithm depends on a box coordinate [r, c] that moves 
 from vertex to vertex. This pair of coordinates could be an object which moves
-according to a direction v. We might as well write <code>x.move(v)</code>.
+according to a direction v. We might as well write <code>x.move(v)</code>. A
+test for equality is needed.
 
 * The traversal algorithm itself should be abstracted, with provisions for
 functional actions at each turn (when the initial and final directions change) 
