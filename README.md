@@ -141,7 +141,7 @@ one for centroid coordinates saves considerable space. Conceptually, such an
 interface presents this pattern of coordinates:
 ```
  UL→     UR↓     [r-1,c-1]     [r-1,c+1]
-.  [r,c]                  [r,c]
+.  [r,c]                 [r,c]
  LL↑     LR←     [r+1,c-1]     [r+1,c+1]
 ```
 Nothing more is needed. The box coordinate [r,c] automatically satisfies
