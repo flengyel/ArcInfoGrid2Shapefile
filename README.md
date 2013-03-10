@@ -25,9 +25,10 @@ The program was written to upload raster data in a format useable by
 [CartoDB](http://www.cartodb.com). See the [following correspondence](https://groups.google.com/d/msg/cartodb/fbjRhgO-AMo/x8Mfy_Z_8DgJ) on the [CartoDB google group](https://groups.google.com/forum/?fromgroups=#!forum/cartodb).
 
 ## Notes on coordinates ##
-The following was determined from ESRI documentation of ArcInfo Grid ASCII files online, and 
-was verified by examination of the output of the <code>gdalinfo</code> GDAL utility applied to 
-ArcInfo Grid ASCII files, and by examination of converted files within GIS systems.
+The following was determined from ESRI documentation of ArcInfo Grid ASCII 
+files online, and was verified by examination of the output of the 
+<code>gdalinfo</code> GDAL utility applied to ArcInfo Grid ASCII files, and 
+by examination of converted files within GIS systems.
 * The origin of the raster is defined to be the <code>(x, y)</code> coordinates of the upper-left corner of the upper left grid square of size <code>cellsize</code>, namely <code>(x0, y0) = (xllcorner, yllcorner + nrows * cellsize)</code>. 
 * The coordinates of the center of the grid square at the origin are then <code>(x0 + cellsize/2, y0 - cellsize/2)</code>. 
 * In general, the geographic coordinates <code>(x, y)</code> of the pixel at 
@@ -41,8 +42,9 @@ The change of coordinates is given by
 [r, c] = [2i+1, 2j+1], 
 ```
 where (i, j) are the coordinates of the pixel at row i, column j in raster space. 
-The four corners and edge coordinates of the box corresponding to the pixel (i, j) are
-shown below. The directions shown are clockwise traversal directions at each vertex.
+The four corners and edge coordinates of the box corresponding to the 
+pixel (i, j) are shown below. The directions shown are clockwise traversal 
+directions at each vertex.
 ```
  UL→   Top   UR↓       [r-1,c-1]  [r-1,c] [r-1,c+1]
  Left  [r,c] Right     [r,c-1]    [r,c]   [r,c+1]
@@ -115,11 +117,56 @@ The example produces a vector grid square for each 5 minute pixel.
 * scipy (for arcinfo.py)
 * argparse
 
+## To do ##
+There are several opportunities for functional and object-oriented improvements.
+
+* Box coordinates can be handled through an interface. The box coordinate [r,c] 
+is valid if and only if r+c is even. The point [r,c] is a vertex if and only if
+r and c are even and a pixel (a region number) if and only if r and c are odd.
+The interface to the box space could be a class. The implementation need
+not be an matrix of size 2nrows+1 x 2ncols+1. The vertex set could be an array 
+of size (nrows+1)x(ncols+1). The internal vertex coordinate  could be
+written {p, q}; the change of coordinates is given by [r, c] = {2p, 2q}. The 
+Region numbers could be stored in a matrix of size nrows x ncols. The 
+mapping from internal coordinates to to external box centroid coordinates is 
+[r, c] = {2p+1, 2q+1}. The change of coordinates between pixel space (i, j)
+coordinates and internal box centroid coordinates is the identity.
+
+* The internal box centroid coordinate space could be represented by 32-bit 
+integers. This is necessary because there can be hundreds of thousands or 
+millions of polygons in general, and there is a one-one correspondence
+between regions and polygon boundaries (but not holes). Sixteen-bit words are 
+insufficient. However, the use of two arrays, one for vertex coordinates and 
+one for centroid coordinates saves considerable space. Conceptually, such an 
+interface presents this pattern of coordinates:
+```
+ UL→       UR↓       [r-1,c-1]       [r-1,c+1]
+     [r,c]                     [r,c]          
+ LL↑       LR←       [r+1,c-1]       [r+1,c+1]
+```
+Nothing more is needed. The box coordinate [r,c] automatically satisfies
+r+c = 0 mod 2. The internal representation is never manipulated directly--always
+through a stylized interface. 
+
+* The traversal algorithm depends on a box coordinate [r, c] that moves 
+from vertex to vertex. This pair of coordinates could be an object which moves
+according to a direction v. We might as well write <code>x.move(v)</code>.
+
+* The traversal algorithm itself should be abstracted, with provisions for
+functional actions at each turn (when the initial and final directions change) 
+and for a preamble.
+
+* Region number handling could be abstracted and possibly handled together
+with the polygon database, which maps a region number to the starting vertex
+of the boundary of the polygon having that region number. The region to class
+mapping can also be handled. A region number can be provisionally assigned
+through such an interface, and then commited if there are no path collisions,
+or reverted if there is a path collision.
+
 ## Author ##
 Florian Lengyel, [CUNY Environmental CrossRoads Initiative](http://asrc.cuny.edu/crossroads), 
 [Advanced Science Research Center](http://asrc.cuny.edu/crossroads),
-[The City College of New York](http://www.ccny.cuny.edu), [CUNY](http://www.cuny.edu).
-Contact: gmail/skype/twitter florianlengyel 
+[The City College of New York](http://www.ccny.cuny.edu), [CUNY](http://www.cuny.edu).  Contact: gmail/skype/twitter florianlengyel 
 
 ## License ##
 Original software is licensed under the [MIT License](http://opensource.org/licenses/MIT): (c) 2013 Florian Lengyel. All other original work is licensed under an [Attribution-NonCommercial-ShareAlike 3.0 United States](http://creativecommons.org/licenses/by-nc-sa/3.0/us/) 
