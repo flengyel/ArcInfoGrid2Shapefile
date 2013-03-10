@@ -120,24 +120,35 @@ The example produces a vector grid square for each 5 minute pixel.
 ## To do ##
 There are several opportunities for functional and object-oriented improvements.
 
-* Box coordinates can be handled through an interface. The box coordinate [r,c] 
-is valid if and only if r+c is even. The point [r,c] is a vertex if and only if
-r and c are even and a pixel (a region number) if and only if r and c are odd.
-The interface to the box space could be a class. The implementation need not be 
-an matrix of size (2*nrows+1)x(2*ncols+1). The vertex set could be an array 
-of size (nrows+1)x(ncols+1). The internal vertex coordinate  could be
-written {p, q}; the change of coordinates is given by [r,c] = {2p,2q}. The 
-Region numbers could be stored in a matrix of size nrows x ncols. The 
-mapping from internal coordinates to to external box centroid coordinates is 
-[r,c] = {2p+1,2q+1}. The change of coordinates between pixel space (i,j)
-coordinates and internal box centroid coordinates is the identity.
+* Box coordinates can be handled through an interface. The box coordinate 
+<code>[r,c]</code> is valid if and only if <code>r+c</code> is even. 
+The point <code>[r,c]</code> is the box coordinate of a vertex if and only if
+<code>r</code> and <code>c</code> are even. The point <code>[r,c]</code> is
+the box coordinate of a region number (corresponding to a pixel in raster
+space) if and only if <code>r</code> and <code>c</code> are odd.
 
-* The internal box centroid could be represented by a matrix of 32-bit 
+* The interface to the box space could be a class. The implementation need not 
+be a directly manipulated matrix of size <code>(2*nrows+1)x(2*ncols+1)</code>. 
+The vertex space need not be implemented as an array, but as a single point
+whose coordinates vary from vertex to vertex as the point moves through the
+box coordinate space. At most two points are needed: the next *valid* point,
+and the currently moving point. Only centroids of boxes
+are ever written to. Vertices in box space never have values, so values of
+vertices need not be represented at all.
+
+* Region numbers are the (centroid) values of boxes.  Region numbers could be 
+stored in a matrix of size <code>nrows x ncols</code>. The mapping from 
+internal coordinates to external box centroid coordinates is 
+<code>[r,c] = {2p+1,2q+1}</code>.  The change of coordinates between 
+raster space <code>(i,j)</code> coordinates and internal box centroid 
+coordinates is the identity.
+
+* The internal box centroid space could be represented by a matrix of 32-bit 
 integers. This is necessary because there can be hundreds of thousands or 
 millions of polygons in general, and there is a one-one correspondence
 between regions and polygon boundaries (but not holes). Sixteen-bit words are 
 insufficient. However, the use of two arrays, one for vertex coordinates and 
-one for centroid coordinates saves considerable space. Conceptually, such an 
+one for box centroid values, saves considerable space. Conceptually, such an 
 interface presents this pattern of coordinates:
 ```
  UL→     UR↓     [r-1,c-1]     [r-1,c+1]
