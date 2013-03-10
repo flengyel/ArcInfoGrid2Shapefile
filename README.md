@@ -147,17 +147,17 @@ coordinates is the identity.
 integers. This is necessary because there can be hundreds of thousands or 
 millions of polygons in general, and there is a one-one correspondence
 between regions and polygon boundaries (but not holes). Sixteen-bit words are 
-insufficient. However, the use of two arrays, one for vertex coordinates and 
-one for box centroid values, saves considerable space. Conceptually, such an 
-interface presents this pattern of coordinates:
+insufficient. However, the use of one 32-bit arrays for box centroid values
+will save considerable space. Conceptually, such an interface presents this 
+pattern of coordinates:
 ```
  UL→     UR↓     [r-1,c-1]     [r-1,c+1]
 .  [r,c]                 [r,c]
  LL↑     LR←     [r+1,c-1]     [r+1,c+1]
 ```
 Nothing more is needed. The box coordinate [r,c] automatically satisfies
-r+c = 0 mod 2. The internal representation is never manipulated directly--always
-through a stylized interface. 
+r+c = 0 mod 2. The internal representation is never manipulated 
+directly--always through a stylized interface. 
 
 * The traversal algorithm depends on a box coordinate [r, c] that moves 
 from vertex to vertex. This pair of coordinates could be an object which moves
