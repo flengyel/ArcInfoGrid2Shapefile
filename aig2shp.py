@@ -201,6 +201,94 @@ def enum(**enums):
 # vertex directions
 vx = enum(z=0, r=1, d=2, l=3, u=4)
 
+
+class Vertex(object):
+  """A vertex is a pair [r, c] of points in box space.  The box coordinates 
+     of the pixel at (i, j)  row i, column j, are denoted [r, c] and are 
+     related by r,c = 2*i+1, 2*j+1. A vertex of the box at [r, c] is one
+     of the four points UL, UR, LL, LR below.
+
+      UL→      UR↓       [r-1,c-1]   [r-1,c+1]
+         [r,c]                  [r,c]  
+      LL↑      LR←       [r+1,c-1]   [r+1,c+1]
+      
+      The arrows indicate the clockwise direction. Only individual vertex
+      are stored, and only two are needed: the next available box, and
+      the current vertex.
+
+      A vertex [r, c] is _valid_ if and only if <code>r+c = 0 mod 2</code>.
+      A box center has odd coordinates; corners have even coordinates.
+   """
+
+  def __init__(self, hdr):
+    """ Initialize the upper left corner"""
+    self.r, self.c = 0,0  # upper left corner of box space
+    self.boxRows = 2 * hdr.nrows + 1
+    self.boxCols = 2 * hdr.ncols + 1
+
+    # define maps to add to [r,c] vertex coordinates
+    self.goR    = { vx.r   :  0,  vx.d :  2, vx.l   :  0,  vx.u : -2}
+    self.goC    = { vx.r   :  2,  vx.d :  0, vx.l   : -2,  vx.u :  0}
+
+    # clockwise and counter-clockwise direction changes
+    self.cw     = { vx.r : vx.d, vx.d : vx.l, vx.l : vx.u, vx.u : vx.r }
+    self.ccw    = { vx.r : vx.u, vx.u : vx.l, vx.l : vx.d, vx.d : vx.r }
+
+    # relative coordinates of inside and outside squares, 
+    # given a vertex [r, c] and a direction vector vx.
+    self.insideR = { vx.r : 1, vx.d : 1, vx.l :-1, vx.u :-1 }
+    self.insideC = { vx.r : 1, vx.d :-1, vx.l :-1, vx.u : 1 }
+
+    self.outsideR = { vx.r :-1, vx.d : 1, vx.l : 1, vx.u :-1 }
+    self.outsideC = { vx.r : 1, vx.d : 1, vx.l :-1, vx.u :-1 }
+
+    # used for diagnostics
+    self.diag = { vx.z : 'z', vx.r : 'r', vx.d : 'd', vx.l : 'l', vx.u : 'u' }
+
+  def move(self, v):
+    """Move vertex using direction"""
+    self.r += self.goR[v] 
+    self.c += self.goC[v]
+
+  def isBoxCoord(self, r, c):
+    """True iff [r,c] is a valid box coordinate"""
+    return ((0 <= r) and (r <  self.boxRows) and 
+		  (0 <= c) and c <  (self.boxCols))
+
+  def isInOut(self, isIn, v, cls):
+    """Returns True if the square clockwise (ccw if isIn is False) 
+       from [self.r, self.c] in  direction v exists and is in the 
+       class cls; False otherwise."""
+    if isIn:   
+      r = self.r + self.insideR[v]
+      c = self.c + self.insideC[v]
+    else:
+      r = self.r + self.outsideR[v]
+      c = self.c + self.outsideC[v]
+    if not self.isBoxCoord(r, c): 
+      return False
+    # [r, c] coordinates valid
+    i, j = self.box2pixel(r, c)  # get corresponding raster coordinates
+    return (self.raster.grid[i][j] == cls)
+
+  # more optimized version for second pass, after all regions identified
+  def isInOutReg(self, isIn,  v, reg):
+    """Returns True if the square clockwise (ccw if isIn is False) 
+       from [r, c] in  direction v exists and is in the region reg; 
+       false otherwise."""
+    if isIn:   
+      r = self.r + self.insideR[v]
+      c = self.c + self.insideC[v]
+    else:
+      r += self.outsideR[v]
+      c += self.outsideC[v]
+    if not self.isBoxCoord(r, c): 
+      return False
+    # [r, c] coordinates valid
+    i, j = self.box2pixel(r, c)  # get corresponding raster coordinates
+    return (self.box[i][j] == reg)
+
+
 class PolygonDB(object):
   """List of polygons and potential holes created by Dissolver object"""
 
@@ -227,24 +315,70 @@ class PolygonDB(object):
     self.db[region].append((r-1, c+1))
 
 
+class regionMatrix(object):
+  """Handles the region matrix and the allocation of new
+     regions to polygons."""
+
+  def __init(self, hdr, raster)__:
+    """Create the region matrix. Keep track of the next region
+       number.
+
+    self.nrows = hdr.nrows
+    self.ncols = hdr.ncols
+    self.raster = raster
+    
+    # allow for 2 billion polygons
+    self.box   = np.zeros(shape = (self.nrows, self.ncols), dtype = np.int32) 
+
+    # Next region number
+    self.region = 0L   # the initial region is zero.
+
+    # Initial valid box center
+    self.i =  0  # CAUTION: the nextValid() function starts from (i,j+1)
+    self.j = -1  # and must be called to set the current valid pixel
+
+    # box center to corner map
+    self.vertexR = { vx.z : 1, vx.l : 0, vx.r : 0, vx.u : 2, vx.d : 2 }
+    self.vertexC = { vx.z : 1, vx.l : 0, vx.r : 2, vx.u : 0, vx.d : 2 }
+
+    self.region2class = { 0L : np.nan }  # the outside region
+
+  def nextValid(self):
+    """Find the next starting point [r,c] = [2i+1, 2j+1] of bounding polygon 
+       or potential annulus ring."""
+
+    i = self.i  # exhaust the current row
+    # (i,j) was valid; start at (i, j+1) 
+    for j in range(self.j+1, self.ncols): # (i,j+1) to (i, ncols-1)
+      if self.box[i][j] == 0: # note that isValid is local and needs self
+	 self.i, self.j = i, j
+	 return True
+    # continue with remaining rows
+    for i in range(self.i+1, self.nrows):
+      for j in range(0, self.ncols):
+        if self.box[i][j]:
+	 self.i, self.j = i, j
+	 return True
+    return False
+
+  # Used for moving from a box center to a vertex of the box
+  # when the starting direction is determined.
+  def pixel2vertex(self, i, j, v):
+    """Box coordinates [r, c] of pixel at raster coordinates (i, j)
+       The translation from pixel (i,j) coordinates to box coordinates 
+       is indicated by:
+       vx.l    vx.r    [2i,2j]           [2i, 2j+2]
+           vx.z               [2i+1,2j+1]
+       vx.u    vx.d    [2i+2,2j]         [2i+2,2j+2]
+    """
+    return ((i<<1)+self.vertexR[v], (j<<1)+self.vertexC[v])
+
+
 class Dissolver(object):
   """Dissolve polygons in raster space. Uses box coordinate representation.
-
-     The box coordinates of the pixel at (i, j) meaning row i, column j,
-     are denoted [r, c] and are related by r,c = 2*i+1, 2*j+1. The
-     meaning of upper left UL, upper right UR, lower left LL, lower right
-     LR, top edge, bot edge, left edge and right edge are define once
-     and for all in the following diagram. The definitions are intended
-     to comport with the orientation of raster space.
-
-      UL→   Top   UR↓       [r-1,c-1]  [r-1,c] [r-1,c+1]
-      Left  [r,c] Right     [r,c-1]    [r,c]   [r,c+1]
-      LL↑   Bot   LR←       [r+1,c-1]  [r+1,c] [r+1,c+1]
-
-      Note: Left, Top, Right and Bot aren't used. A little wasteful.
   """
 
-  def __init__(self, args, hdr, ext, raster, polyDB):
+  def __init__(self, args, hdr, ext, raster, polyDB, regionMatrix):
     """Create a Dissolver, using 
        args   -- parsed arguments 
        hdr    -- Grid ASCII header 
@@ -257,38 +391,8 @@ class Dissolver(object):
     self.ext  = ext
     self.raster = raster  # this is a raster object
     self.polyDB = polyDB
+    self.matrix = regionMatrix
 
-
-    # Create the box coordinate space (i, j) -> [2*i+1, 2*j+1]
-    # Square brackets denote box coordinates, parentheses denote pixel coordinates.
-    self.boxRows  = 2*hdr.nrows + 1
-    self.boxCols  = 2*hdr.ncols + 1
-
-    # use 32 bit integers 
-    self.box   = np.zeros(shape = (self.boxRows, self.boxCols), 
-		    dtype = np.int32) 
-
-    self.i =  0  # CAUTION: the nextValid() function starts from (i,j+1)
-    self.j = -1  # and must be called to set the current valid pixel
-
-    # define maps to add to [r,c] vertex coordinates
-    self.goR    = { vx.r   :  0,  vx.d :  2, vx.l   :  0,  vx.u : -2}
-    self.goC    = { vx.r   :  2,  vx.d :  0, vx.l   : -2,  vx.u :  0}
-
-    # clockwise and counter-clockwise direction changes
-    self.cw     = { vx.r : vx.d, vx.d : vx.l, vx.l : vx.u, vx.u : vx.r }
-    self.ccw    = { vx.r : vx.u, vx.u : vx.l, vx.l : vx.d, vx.d : vx.r }
-
-    # relative coordinates of inside and outside squares, 
-    # given a vertex [r, c] and a direction vector vx.
-    self.insideR = { vx.r : 1, vx.d : 1, vx.l :-1, vx.u :-1 }
-    self.insideC = { vx.r : 1, vx.d :-1, vx.l :-1, vx.u : 1 }
-
-    self.outsideR = { vx.r :-1, vx.d : 1, vx.l : 1, vx.u :-1 }
-    self.outsideC = { vx.r : 1, vx.d : 1, vx.l :-1, vx.u :-1 }
-
-    # used for diagnostics
-    self.diag = { vx.z : 'z', vx.r : 'r', vx.d : 'd', vx.l : 'l', vx.u : 'u' }
 
     # Simply connected region to class map
     # The region outside the raster is 0 by definition. Its classification is
@@ -296,54 +400,12 @@ class Dissolver(object):
     # This is precisely the behavior one wants. The upper left hand corner is
     # in region 1, by definition. All other region numbers are defined as
     # the program runs.
-    self.region2class = { 0L : np.nan }  # the outside region
 
-    # Global locally simply connected region number
-    self.region = 0L  # The box at [r,c] is marked by the region number    
-
-  def move(self, r, c, v):
-    """recompute box coordinates using the mov enum"""
-    return (r + self.goR[v], c + self.goC[v])
-
-  def isBoxCoord(self, r, c):
-    """True iff [r,c] is a valid box coordinate"""
-    return ((0 <= r) and (r <  self.boxRows) and 
-		  (0 <= c) and c <  (self.boxCols))
-
-  def pixel2box(self, i, j):
-    """Box coordinates [r, c] of pixel at raster coordinates (i, j)"""
-    return ((i<<1)+1, (j<<1)+1)
 
   def box2pixel(self, r, c):
     """Return pixel coordinates (i,j) of box at box coordinates [r,c]"""
     return ((r-1)>>1, (c-1)>>1)
   
-  def nextValid(self):
-    """Find the next starting point [r,c] of bounding polygon 
-       or potential annulus ring."""
-
-    def isValid(self, i, j): # this local function isn't used elsewhere
-      """True iff the pixel at (i, j) (box at [r, c]) has not been
-      assigned a nonzero region number. Handling special data values goes
-      elsewhere."""
-      self.r, self.c = self.pixel2box(i, j)
-      return self.box[self.r][self.c] == 0
-
-    # box coordinates [r, c] of the next valid pixel
-    i = self.i  # exhaust the current row
-    # (i,j) was valid; start at (i, j+1) 
-    for j in range(self.j+1, hdr.ncols): # (i,j+1) to (i, ncols-1)
-      if isValid(self, i, j): # note that isValid is local and needs self
-	 self.i, self.j = i, j
-	 return True
-    # continue with remaining rows
-    for i in range(self.i+1, hdr.nrows):
-      for j in range(0, hdr.ncols):
-        if isValid(self, i, j):
-	 self.i, self.j = i, j
-	 return True
-    return False
-
   def isSucc(self, r, c):
     """Check if [r, c] is the successor of [self.r, self.c]"""
     #Case 1: [r, c] == [self.r, c+2]
@@ -412,38 +474,6 @@ class Dissolver(object):
     #  self.advCrnt(r, c)
     return True
 
-  def isInOut(self, isIn, r, c, v, cls):
-    """Returns True if the square clockwise (ccw if isIn is False) 
-       from [r, c] in  direction v exists and is in the class cls; 
-       false otherwise."""
-    if isIn:   
-      r += self.insideR[v]
-      c += self.insideC[v]
-    else:
-      r += self.outsideR[v]
-      c += self.outsideC[v]
-    if not self.isBoxCoord(r, c): 
-      return False
-    # [r, c] coordinates valid
-    i, j = self.box2pixel(r, c)  # get corresponding raster coordinates
-    return (self.raster.grid[i][j] == cls)
-
-
-  # more optimized version for second pass, after all regions identified
-  def isInOutReg(self, isIn, r, c, v, reg):
-    """Returns True if the square clockwise (ccw if isIn is False) 
-       from [r, c] in  direction v exists and is in the region reg; 
-       false otherwise."""
-    if isIn:   
-      r += self.insideR[v]
-      c += self.insideC[v]
-    else:
-      r += self.outsideR[v]
-      c += self.outsideC[v]
-    if not self.isBoxCoord(r, c): 
-      return False
-    # [r, c] coordinates valid
-    return (self.box[r][c] == reg)
 
 
   # Simply Connected Region handling. The upper left-hand corner has 
