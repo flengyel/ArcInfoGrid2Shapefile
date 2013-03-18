@@ -264,10 +264,19 @@ class Dissolver(object):
     self.boxRows  = 2*hdr.nrows + 1
     self.boxCols  = 2*hdr.ncols + 1
 
-    # use 32 bit integers 
-    self.box   = np.zeros(shape = (self.boxRows, self.boxCols), 
-		    dtype = np.int32) 
 
+
+    # use 32 bit integers 
+    # First refactoring: box coordinates are identical to
+    # pixel coordinates. Translation is done at the last step.
+    # This will save 4 times the space at the expense of some
+    # computation initially. Subsequent refactorings will remove
+    # some computation
+    self.nrows = self.hdr.nrows
+    self.ncols = self.hdr.ncols
+    self.box   = np.zeros(shape = (self.nrows, self.ncols), dtype = np.int32) 
+
+    # current position within the box 
     self.i =  0  # CAUTION: the nextValid() function starts from (i,j+1)
     self.j = -1  # and must be called to set the current valid pixel
 
@@ -305,6 +314,7 @@ class Dissolver(object):
     """recompute box coordinates using the mov enum"""
     return (r + self.goR[v], c + self.goC[v])
 
+  # Should be is VertexCoord
   def isBoxCoord(self, r, c):
     """True iff [r,c] is a valid box coordinate"""
     return ((0 <= r) and (r <  self.boxRows) and 
@@ -327,7 +337,7 @@ class Dissolver(object):
       assigned a nonzero region number. Handling special data values goes
       elsewhere."""
       self.r, self.c = self.pixel2box(i, j)
-      return self.box[self.r][self.c] == 0
+      return self.box[i][j] == 0
 
     # box coordinates [r, c] of the next valid pixel
     i = self.i  # exhaust the current row
@@ -364,12 +374,14 @@ class Dissolver(object):
   def getInsideRegion(self, r, c, v):
     """Get the region of the box at vertex [r, c] clockwise 
        from direction v"""
-    return (self.box[r+self.insideR[v]][c+self.insideC[v]])
+    i, j = self.box2pixel(r+self.insideR[v], c+self.insideC[v])
+    return (self.box[i][j])
 
   def stampBox(self, r, c, v, region):
     """Like markBox below, only without checking.
        Used by pathFix()"""
-    self.box[r+self.insideR[v]][c+self.insideC[v]] = region
+    i, j = self.box2pixel(r+self.insideR[v], c+self.insideC[v])
+    self.box[i][j] = region
 
   def markBox(self, r, c, v, region):
     """Mark the inside  box [r0, c0] at vertex [r, c] in direction v. 
@@ -377,35 +389,12 @@ class Dissolver(object):
        region; return False if the box is nonzero and marked with
        some other region
     """
-    r0 = r + self.insideR[v]
-    c0 = c + self.insideC[v]
-
-    verbosity = self.args.verbosity
-    if ((verbosity >= 6) or (verbosity >= 5 and region == 5)):
-      print 'Marking box [{0},{1}] at vertex [{2},{3}] in direction {4} region {5}'.format( r0, c0, r, c, self.diag[v],region )
-      for rr in xrange(max(0,r0-5),min(self.boxRows,r0+6)):
-        print "".join(str(dis.box[rr][cc]) for cc in 
-			xrange(max(0,c0-5),min(self.boxRows,c0+6)))
-
-    reg = self.box[r0][c0]
-
-    if (verbosity >= 7 and reg != 0 and reg == region):
-      print 'INFO: Already marked box [{0},{1}] with region {2}.'.format(
-		         r0, c0, region)
+    i, j = self.box2pixel(r+self.insideR[v], c+self.insideC[v])
+    reg = self.box[i][j]
 
     if (reg != 0 and reg != region):
-      # return False and enter pathFix() algorithm  
-      # Traverse, then exit if this condition occurs.
-      if (verbosity >= 6):
-        k, l = self.box2pixel(r0, c0)
-        for i in xrange(max(0,k-2), min(self.hdr.nrows,k+3)):
-          print "".join(str(self.raster.grid[i][j])+' ' for j in
-			xrange(max(0,l-2),min(self.hdr.ncols,l+3)))
-	print 'COLLISION: markBox(vertex=[{0}, {1}], vector={2},region={3}) center [{4},{5}]'.format(r, c, self.diag[v], region, r0, c0)
-	print'COLLISION: [{0},{1}] should be {2} instead of {3}'.format(
-			      r0, c0, reg, region)
       return False	# don't set the region! This is the stopping point
-    self.box[r0][c0] = region
+    self.box[i][j] = region
     # This seems to add nothing in practice
     #if self.args.opt and self.isSucc(r, c):
     #  print 'optimize!'
@@ -443,7 +432,8 @@ class Dissolver(object):
     if not self.isBoxCoord(r, c): 
       return False
     # [r, c] coordinates valid
-    return (self.box[r][c] == reg)
+    i, j = self.box2pixel(r, c)
+    return (self.box[i][j] == reg)
 
 
   # Simply Connected Region handling. The upper left-hand corner has 
@@ -486,6 +476,11 @@ class Dissolver(object):
     rTop  = self.r-2
     cTop  = self.c
 
+    # get i,j coordinates of these for later refactoring
+    i, j = self.box2pixel(self.r, self.c)
+    iLeft, jLeft = self.box2pixel(rLeft, cLeft)
+    iTop, jTop = self.box2pixel(rTop, cTop)
+
     myCls = self.getCls(self.r, self.c)
 
     if not self.isBoxCoord(rLeft, cLeft):
@@ -494,13 +489,13 @@ class Dissolver(object):
 	self.region += 1
         self.polyDB.addPolygon(self.region, self.r, self.c)
 	self.region2class[self.region] = myCls
-        self.box[self.r][self.c] = self.region  
+        self.box[i][j] = self.region  
         return (self.region, vx.r)    
       else:
 	# Left undefined, Top is defined -- get cls
 	if self.getCls(rTop, cTop) == myCls:
-	  region = self.box[rTop][cTop]
-          self.box[self.r][self.c] = region
+	  region = self.box[iTop][jTop]
+          self.box[i][j] = region
 	  # you cannot move right -- this would mean crossing an edge
 	  return (region, vx.z)
         else:
@@ -508,7 +503,7 @@ class Dissolver(object):
 	  self.region += 1
           self.polyDB.addPolygon(self.region, self.r, self.c)
 	  self.region2class[self.region] = myCls  # add the new region
-          self.box[self.r][self.c] = self.region
+          self.box[i][j] = self.region
 	  return (self.region, vx.r)
 
     # Left is defined. Suppose the top is not defined. This is a sanity check
@@ -524,22 +519,22 @@ class Dissolver(object):
         self.region += 1
         self.polyDB.addPolygon(self.region, self.r, self.c)
 	self.region2class[self.region] = myCls  # add the new region
-        self.box[self.r][self.c] = self.region
+        self.box[i][j] = self.region
 	return (self.region, vx.r)
 
     # finally, the top and left are defined 
-    topRegion  = self.box[rTop][cTop]
-    leftRegion = self.box[rLeft][cLeft]
+    topRegion  = self.box[iTop][jTop]
+    leftRegion = self.box[iLeft][jLeft]
 
     try:
       if myCls == self.region2class[topRegion]:
-        self.box[self.r][self.c] = topRegion
+        self.box[i][j] = topRegion
         # you cannot move right -- crossing deleted edge
         return (topRegion, vx.z)
     except KeyError:
       print 'EXCEPTION: box[{0}][{1}] topRegion {2} top box [{3},{4}] not in map, myCls {5}'.format( self.r, self.c, topRegion, rTop, cTop, myCls)
       print 'self.box[{0}][{1}] = {2} next available region {3}'.format(
-		      rTop,cTop,self.box[rTop][cTop], self.region)
+		      rTop,cTop,self.box[iTop][jTop], self.region)
       print self.region2class
       exit(-2)
 
@@ -547,13 +542,13 @@ class Dissolver(object):
 
     try:
       if myCls == self.region2class[leftRegion]:
-        self.box[self.r][self.c] = leftRegion
+        self.box[i][j] = leftRegion
         return (leftRegion, vx.r)
 
     except KeyError:
       print 'EXCEPTION: box[{0}][{1}] topRegion {2} top box [{3},{4}] not in map, myCls {5}'.format( self.r, self.c, topRegion, rTop, cTop, myCls)
       print 'self.box[{0}][{1}] = {2} next available region {3}'.format(
-		      rTop,cTop,self.box[rTop][cTop], self.region)
+		      rTop,cTop,self.box[iTop][jTop], self.region)
       print self.region2class
       exit(-3)
 
@@ -563,12 +558,12 @@ class Dissolver(object):
     self.polyDB.addPolygon(self.region, self.r, self.c)
     #if self.region2class[leftRegion] == self.region2class[topRegion]:
     if leftRegion == topRegion: # left and top region are defined
-      # to be sure, find the diagonally oppostite region at [self.r-2, self.c-2]
-      if leftRegion == self.box[self.r-2, self.c-2]:
+      # to be sure, find the diagonally oppostite region at [i-1, j-1]
+      if leftRegion == self.box[i-1, j-1]:
         # this is potentially a hole -- you may have to undo
         self.polyDB.addHole(leftRegion, self.r, self.c)  
     self.region2class[self.region] = myCls  # add the new region
-    self.box[self.r][self.c] = self.region
+    self.box[i][j] = self.region
     return (self.region, vx.r)
 
 
@@ -658,6 +653,7 @@ class Dissolver(object):
     # the class is needed to determine direction
     cls =  self.getCls(self.r, self.c)  
 
+    # move to upper left corner
     r = self.r-1
     c = self.c-1
 
@@ -1005,11 +1001,6 @@ if __name__ == '__main__':
 
         for vertex in polyList[1:]:
 	  r, c = vertex
-
-          if verbosity >= 6:
-	    for rr in xrange(max(0,r-2),min(dis.boxRows,r+5)):
-	      print "".join(str(dis.box[rr][cc]) for cc in 
-			       xrange(max(0,c-4),min(dis.boxRows,c+3)))
 
 	  if dis.isHole(r, c, region, r0, c0):
             if verbosity >= 6:
