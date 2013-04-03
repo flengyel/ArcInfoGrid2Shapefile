@@ -104,10 +104,25 @@ In this example, cropland for a region including Africa was subsetted from the
 Ramankutty cropland raster data set [1] in ArcInfo Grid ASCII format, and used 
 to produce a corresponding shapefile. 
 ``` 
-./aig2shp.py -e -34.892837 -17.338675  37.428152 57.845763 --wgs84 -n -v ramankutty_cropland2000_frac_5m.asc vector_squares.shp
+./aig2shp.py -e -17.338675 -34.892837 57.845763 37.428152 \
+--wgs84 -n -v ramankutty_cropland2000_frac_5m.asc vector_squares.shp
 ```
 The shapefile was uploaded to CartoDB; a screenshot is shown below.
 [<img src="https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCropland.png">](https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCropland.png)
+
+## Example ##
+The previous example results in large files, with one vector grid square
+per raster pixel. Polyonalization produces a better result, after equal
+area histogram reclassification.
+```
+./arcinfo.py -s 1000 -b 20 -r eq \
+	-e -17.338675 -34.892837  57.845763  37.428152 \
+	ramankutty_cropland2000_frac_5m.asc croplandeq20.asc
+
+./aig2shp.py -d -vv --wgs84 croplandeq20.asc x.shp
+```
+[<img src="https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCroplandQGIS.png">](https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCroplandQGIS.png)
+
 
 The example produces a vector grid square for each 5 minute pixel.
 ## Dependencies ##
