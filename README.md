@@ -109,6 +109,7 @@ to produce a corresponding shapefile.
 ```
 The shapefile was uploaded to CartoDB; a screenshot is shown below.
 [<img src="https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCropland.png">](https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCropland.png)
+The example produces a vector grid square for each 5 minute pixel.
 
 ## Example ##
 The previous example results in large files, with one vector grid square
@@ -119,12 +120,30 @@ area histogram reclassification.
 	-e -17.338675 -34.892837  57.845763  37.428152 \
 	ramankutty_cropland2000_frac_5m.asc croplandeq20.asc
 
-./aig2shp.py -d -vv --wgs84 croplandeq20.asc x.shp
+./aig2shp.py -d -vv --wgs84 croplandeq20.asc test.shp
 ```
 [<img src="https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCroplandQGIS.png">](https://raw.github.com/flengyel/ArcInfoGrid2Shapefile/master/AfricaCroplandQGIS.png)
 
+ogrinfo shows 3643 polygons, as opposed to 88917 for the previous example.
 
-The example produces a vector grid square for each 5 minute pixel.
+```
+INFO: Open of `test.shp'
+      using driver `ESRI Shapefile' successful.
+
+Layer name: test
+Geometry: 3D Polygon
+Feature Count: 3643
+Extent: (-11.600000, 4.200000) - (15.800548, 23.900394)
+Layer SRS WKT:
+GEOGCS["GCS_WGS_1984",
+    DATUM["WGS_1984",
+        SPHEROID["WGS_84",6378137,298.257223563]],
+    PRIMEM["Greenwich",0],
+    UNIT["Degree",0.017453292519943295]]
+```
+
+
+
 ## Dependencies ##
 * [ProgressBar](http://code.google.com/p/python-progressbar/)
 * [GDAL 1.9.1](http://pypi.python.org/pypi/GDAL/) GDAL Python bindings
