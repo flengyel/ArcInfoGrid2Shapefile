@@ -214,8 +214,10 @@ Florian Lengyel, [CUNY Environmental CrossRoads Initiative](http://asrc.cuny.edu
 [Advanced Science Research Center](http://asrc.cuny.edu/crossroads),
 [The City College of New York](http://www.ccny.cuny.edu), [CUNY](http://www.cuny.edu).  Contact: gmail/skype/twitter florianlengyel 
 
+Dorsey Davidoff.
+
 ## License ##
-Original software is licensed under the [MIT License](http://opensource.org/licenses/MIT): (c) 2013 Florian Lengyel. All other original work is licensed under an [Attribution-NonCommercial-ShareAlike 3.0 United States](http://creativecommons.org/licenses/by-nc-sa/3.0/us/) 
+Original software is licensed under the [MIT License](http://opensource.org/licenses/MIT): (c) 2013 Florian Lengyel and Dorsey Davidoff. All other original work is licensed under an [Attribution-NonCommercial-ShareAlike 3.0 United States](http://creativecommons.org/licenses/by-nc-sa/3.0/us/) 
 Creative Commons License: (CC BY-NC-SA 3.0 US) 2013 Florian Lengyel. Derivative work is licensed accordingly.  Full license in License.txt.
 
 ## References ##
