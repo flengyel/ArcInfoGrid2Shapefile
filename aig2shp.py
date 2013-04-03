@@ -177,9 +177,9 @@ class ExtentHandler(object):
         if self.minY < hdr.yll:
           raise ValueError, extError.format('minY', self.minY, hdr.yll, 'yllcorner')
         if hdr.xur < self.maxX:
-          raise ValueError, extError.format('xurcorner', hdr.xul, self.maxX, 'maxX')
+          raise ValueError, extError.format('xurcorner', hdr.xur, self.maxX, 'maxX')
         if hdr.yur < self.maxY:
-          raise ValueError, extError.format('yurcorner', hdr.xur, self.maxY, 'maxY')
+          raise ValueError, extError.format('yurcorner', hdr.yur, self.maxY, 'maxY')
       # verify that the extent defines a box 
       consistent = self.minX <= self.maxX and self.minY <= self.maxY
       if not consistent:
