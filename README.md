@@ -176,7 +176,7 @@ internal coordinates to external box centroid coordinates is
 raster space <code>(i,j)</code> coordinates and internal box centroid 
 coordinates is the identity.
 
-* The internal box centroid space could be represented by a matrix of 32-bit 
+* DONE: The internal box centroid space could be represented by a matrix of 32-bit 
 integers. This is necessary because there can be hundreds of thousands or 
 millions of polygons in general, and there is a one-one correspondence
 between regions and polygon boundaries (but not holes). Sixteen-bit words are 
