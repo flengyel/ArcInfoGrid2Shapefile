@@ -996,7 +996,7 @@ if __name__ == '__main__':
         # first poly
         poly = ogr.Geometry(ogr.wkbPolygon)
 
-        # add the outer clockwise ring starting at [r1, c1]
+        # add the outer clockwise ring starting at [r0, c0]
         dis.addRing(poly, region, r0, c0, vx.r)
 
         for vertex in polyList[1:]:
@@ -1004,7 +1004,7 @@ if __name__ == '__main__':
 
 	  if dis.isHole(r, c, region, r0, c0):
             if verbosity >= 6:
-	      print '[{0},{1}] is a hole of [{2},{3}]'.format( r, c, r1, c1 )
+	      print '[{0},{1}] is a hole of [{2},{3}]'.format( r, c, r0, c0 )
 
             # add inner counterclockwise ring at [r, c]
             dis.addRing(poly, region, r, c, vx.l)
