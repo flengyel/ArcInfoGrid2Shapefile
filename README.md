@@ -1,4 +1,3 @@
-aig2shp.py: ArcInfo Grid ASCII to ESRI Shapefile conversion
 =====================
 Vectorization of ArcInfo Grid ASCII files as ESRI Shapefiles. 
 Python program to convert an ArcInfo Grid ASCII raster file to an ESRI 
@@ -209,12 +208,15 @@ mapping can also be handled. A region number can be provisionally assigned
 through such an interface, and then commited if there are no path collisions,
 or reverted if there is a path collision.
 
-## Author ##
+## Authors ##
 Florian Lengyel, [CUNY Environmental CrossRoads Initiative](http://asrc.cuny.edu/crossroads), 
 [Advanced Science Research Center](http://asrc.cuny.edu/crossroads),
 [The City College of New York](http://www.ccny.cuny.edu), [CUNY](http://www.cuny.edu).  Contact: gmail/skype/twitter florianlengyel 
 
 Dorsey Davidoff.
+
+Tian Luan contributed a revision to eliminate an extra colinear point in the construction
+of holes of polygons. 
 
 ## License ##
 Original software is licensed under the [MIT License](http://opensource.org/licenses/MIT): (c) 2013 Florian Lengyel and Dorsey Davidoff. All other original work is licensed under an [Attribution-NonCommercial-ShareAlike 3.0 United States](http://creativecommons.org/licenses/by-nc-sa/3.0/us/) 

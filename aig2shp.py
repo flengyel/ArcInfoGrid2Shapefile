@@ -177,9 +177,9 @@ class ExtentHandler(object):
         if self.minY < hdr.yll:
           raise ValueError, extError.format('minY', self.minY, hdr.yll, 'yllcorner')
         if hdr.xur < self.maxX:
-          raise ValueError, extError.format('xurcorner', hdr.xul, self.maxX, 'maxX')
+          raise ValueError, extError.format('xurcorner', hdr.xur, self.maxX, 'maxX')
         if hdr.yur < self.maxY:
-          raise ValueError, extError.format('yurcorner', hdr.xur, self.maxY, 'maxY')
+          raise ValueError, extError.format('yurcorner', hdr.yur, self.maxY, 'maxY')
       # verify that the extent defines a box 
       consistent = self.minX <= self.maxX and self.minY <= self.maxY
       if not consistent:
@@ -222,9 +222,9 @@ class PolygonDB(object):
 
   def addHole(self, region, r, c):
     """Add the coordinates of the potiential hole associated to region
-    The coordinates are the top right  of the box at [r,c].  Traverse counter 
+    The coordinates are the top left  of the box at [r,c].  Traverse counter 
     clockwise such that the outside is  the 'not region' region"""
-    self.db[region].append((r-1, c+1))
+    self.db[region].append((r-1, c-1))
 
 
 class Dissolver(object):
@@ -769,7 +769,7 @@ class Dissolver(object):
        R   *
     """	  
 
-    v = vx.l # go countercloclwise
+    v = vx.d # go counterclockwise from upper left corner
     # the direction and the region are known
     r0, c0 = r, c  # remember the initial vertex [r0, c0]
 
@@ -996,7 +996,7 @@ if __name__ == '__main__':
         # first poly
         poly = ogr.Geometry(ogr.wkbPolygon)
 
-        # add the outer clockwise ring starting at [r1, c1]
+        # add the outer clockwise ring starting at [r0, c0]
         dis.addRing(poly, region, r0, c0, vx.r)
 
         for vertex in polyList[1:]:
@@ -1004,10 +1004,10 @@ if __name__ == '__main__':
 
 	  if dis.isHole(r, c, region, r0, c0):
             if verbosity >= 6:
-	      print '[{0},{1}] is a hole of [{2},{3}]'.format( r, c, r1, c1 )
+	      print '[{0},{1}] is a hole of [{2},{3}]'.format( r, c, r0, c0 )
 
             # add inner counterclockwise ring at [r, c]
-            dis.addRing(poly, region, r, c, vx.l)
+            dis.addRing(poly, region, r, c, vx.d)
       
         # add the class as an attribute
         feature = ogr.Feature( layer.GetLayerDefn() )
