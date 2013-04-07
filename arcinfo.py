@@ -195,7 +195,7 @@ if __name__ == '__main__':
 
       grid1D = np.fromfile(hdr.file, sep = " \n")
 
-      print grid1D[0], grid1D[-2], grid1D[-1], len(grid1D)
+      # print grid1D[0], grid1D[-2], grid1D[-1], len(grid1D)
 
       # verify that the array can be reshaped
       items = grid1D.shape[0]
