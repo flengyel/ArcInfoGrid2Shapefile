@@ -282,9 +282,9 @@ if __name__ == '__main__':
   endpoints = []
   if args.reclass[0] == 'eq':
     # get quantiles.
-    for i in range(1, args.bins):
+    for i in range(1, args.bins):   # i = 1 to args.bins-1
       endpoints.append(stats.scoreatpercentile(x, i * int(100/args.bins))) 
-    endpoints.append(stats.scoreatpercentile(x, 100))
+    endpoints.append(stats.scoreatpercentile(x, 100))  # i = args.bins
 
   if args.reclass[0] == 'hist':
     counts,endpoints = np.histogram(x, bins=args.bins)
