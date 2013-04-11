@@ -90,10 +90,18 @@ class ArcInfoGridASCII(object):
 	    if args.scaling > 1:
 	      v = int(v * args.scaling)
             cat = np.searchsorted(endpoints, v, side='right')
+	    # write out the bin midpoints instead of bin numbers
+            if args.midpoint:
+              if cat < args.bins:
+                cat = .5 * (endpoints[max(cat-1,0)] + endpoints[cat])
+              else:
+                cat = endpoints[cat-1]
+              #print cat, v
 	  else:
 	    cat = int(self.nodata)
           fd.write('%i ' % cat)
         fd.write('\n')  	
+      #print endpoints
 
 
   def cart2geo(self, row, col):  
@@ -223,6 +231,9 @@ if __name__ == '__main__':
 		    type=float,
 		    metavar=('minX', 'minY', 'maxX', 'maxY'),
 		    help='Bounding box of subset of raster in geographic coordinates.')
+  parser.add_argument('-m','--midpoint',
+                    action='store_true',
+                    help='Write bin midpoints instead of bin numbers.')  
   parser.add_argument('-p','--prt',
 		     action='store_true',
 		     help='Print bin intervals and exit.')
@@ -230,14 +241,14 @@ if __name__ == '__main__':
 		    action='store_true',
 		    help='Suppress progress bar.')
   parser.add_argument('-r', '--reclass',
-		      nargs=1,
-		      choices=['eq', 'hist'],
-		      default='eq',
-		      help='Reclassification. Equal area histogram (quantiles), equal division binning (histogram).')
+		    nargs=1,
+		    choices=['eq', 'hist'],
+		    default='eq',
+		    help='Reclassification. Equal area histogram (quantiles), equal division binning (histogram).')
   parser.add_argument('-s', '--scaling',
-		      type=int,
-		      default=1,
-		      help='Scale raster values by multiplier (usually a factor of 10) and take integer part.')
+		    type=int,
+		    default=1,
+		    help='Scale raster values by multiplier (usually a factor of 10) and take integer part.')
   parser.add_argument('-v', '--verbosity', 
 		    action="count", default=0,
 		    help="Display verbose message output. Each additional 'v' increases message verbosity: -vv is very verbose, and -vvv is very very verbose.")
