@@ -89,14 +89,10 @@ class ArcInfoGridASCII(object):
           if v != self.nodata:
 	    if args.scaling > 1:
 	      v = int(v * args.scaling)
-            cat = np.searchsorted(endpoints, v, side='right')
-	    # write out the bin midpoints instead of bin numbers
-            if args.midpoint:
-              if cat < args.bins:
-                cat = .5 * (endpoints[max(cat-1,0)] + endpoints[cat])
-              else:
-                cat = endpoints[cat-1]
-              #print cat, v
+            cat = np.searchsorted(endpoints, v, side='left')
+            if args.upper:
+              # return the least bin value x such that v <= x
+              cat = int(endpoints[cat])
 	  else:
 	    cat = int(self.nodata)
           fd.write('%i ' % cat)
@@ -231,9 +227,9 @@ if __name__ == '__main__':
 		    type=float,
 		    metavar=('minX', 'minY', 'maxX', 'maxY'),
 		    help='Bounding box of subset of raster in geographic coordinates.')
-  parser.add_argument('-m','--midpoint',
+  parser.add_argument('-u', '--upper',
                     action='store_true',
-                    help='Write bin midpoints instead of bin numbers.')  
+                    help='Write the least bin value greater than or equal to the grid value instead of the bin number of the grid value.')  
   parser.add_argument('-p','--prt',
 		     action='store_true',
 		     help='Print bin intervals and exit.')
