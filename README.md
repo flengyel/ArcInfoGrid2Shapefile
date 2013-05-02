@@ -208,14 +208,14 @@ mapping can also be handled. A region number can be provisionally assigned
 through such an interface, and then commited if there are no path collisions,
 or reverted if there is a path collision.
 
-## Authors ##
+## Authors and contributors ##
 Florian Lengyel, [CUNY Environmental CrossRoads Initiative](http://asrc.cuny.edu/crossroads), 
 [Advanced Science Research Center](http://asrc.cuny.edu/crossroads),
 [The City College of New York](http://www.ccny.cuny.edu), [CUNY](http://www.cuny.edu).  Contact: gmail/skype/twitter florianlengyel 
 
-Dorsey Davidoff.
+Dorsey Davidoff's suggestions were incorporated in the algorithms. 
 
-Tian Luan contributed a revision to eliminate an extra colinear point in the construction
+Tian Luan suggested a revision to eliminate an extra colinear point in the construction
 of holes of polygons. 
 
 ## License ##
