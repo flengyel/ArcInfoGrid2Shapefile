@@ -238,9 +238,9 @@ if __name__ == '__main__':
 		    help='Suppress progress bar.')
   parser.add_argument('-r', '--reclass',
 		    nargs=1,
-		    choices=['eq', 'hist'],
-		    default='eq',
-		    help='Reclassification. Equal area histogram (quantiles), equal division binning (histogram).')
+		    choices=['qu', 'eq'],
+		    default='qu',
+		    help='Reclassification.  Quantile, equal value.')
   parser.add_argument('-s', '--scaling',
 		    type=int,
 		    default=1,
@@ -287,13 +287,13 @@ if __name__ == '__main__':
   x.sort()
 
   endpoints = []
-  if args.reclass[0] == 'eq':
+  if args.reclass[0] == 'qu':
     # get quantiles.
     for i in range(1, args.bins):   # i = 1 to args.bins-1
       endpoints.append(stats.scoreatpercentile(x, i * int(100/args.bins))) 
     endpoints.append(stats.scoreatpercentile(x, 100))  # i = args.bins
 
-  if args.reclass[0] == 'hist':
+  if args.reclass[0] == 'eq':
     counts,endpoints = np.histogram(x, bins=args.bins)
 
   if args.prt:

@@ -112,10 +112,10 @@ The example produces a vector grid square for each 5 minute pixel.
 
 ## Example ##
 The previous example results in large files, with one vector grid square
-per raster pixel. Polyonalization produces a better result, after equal
-area histogram reclassification.
+per raster pixel. Polyonalization produces a better result, after quantile 
+reclassification.
 ```
-./arcinfo.py -s 1000 -b 20 -r eq \
+./arcinfo.py -s 1000 -b 20 -r qu \
 	-e -17.338675 -34.892837  57.845763  37.428152 \
 	ramankutty_cropland2000_frac_5m.asc croplandeq20.asc
 
